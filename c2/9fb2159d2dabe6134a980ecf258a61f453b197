@@ -1,0 +1,75 @@
+.gitignore
+  s_4f987e38acc5ec::t_3e07469b87a5bc 1-3
+SKILL.md
+  s_4f987e38acc5ec::t_150903e24aea60 1-216
+scripts/claim.mjs
+  s_4f987e38acc5ec::t_c212651ab73b09 1-32
+scripts/detect.mjs
+  s_4f987e38acc5ec::t_cc9dd5a295f455 1-220
+scripts/hook.mjs
+  s_4f987e38acc5ec::t_4fb75e49480d01 1-149
+scripts/lib/agents.mjs
+  s_4f987e38acc5ec::t_ef28b642d6debc 1-35
+scripts/lib/locks.mjs
+  s_4f987e38acc5ec::t_b8d1800e3696d4 1-175
+scripts/lib/project.mjs
+  s_4f987e38acc5ec::t_4a99d0ffc76d79 1-60
+scripts/lib/store.mjs
+  s_4f987e38acc5ec::t_2990e06cf16f08 1-180
+scripts/lock.mjs
+  s_4f987e38acc5ec::t_95db68d793cc44 1-46
+scripts/resolve.mjs
+  s_4f987e38acc5ec::t_7f82f435423d7a 1-48
+scripts/server.mjs
+  s_4f987e38acc5ec::t_5bde7564de32a4 1-242
+scripts/verify-prod.mjs
+  s_4f987e38acc5ec::t_89182c61a82118 1-60
+widget/build.mjs
+  s_4f987e38acc5ec::t_587c79a31b08bc 1-14
+widget/dist/widget.js
+  s_4f987e38acc5ec::t_91ee273123b885 1-168
+widget/package-lock.json
+  s_4f987e38acc5ec::t_dde58515d2b270 1-573
+widget/package.json
+  s_4f987e38acc5ec::t_9416ffa0de9b7d 1-17
+widget/src/App.tsx
+  s_4f987e38acc5ec::t_9965221099bc9b 1-805
+widget/src/anchors.ts
+  s_4f987e38acc5ec::t_6281ec4cd4d2f5 1-197
+widget/src/api.ts
+  s_4f987e38acc5ec::t_d2cc777bc1b838 1-108
+widget/src/domain.ts
+  s_4f987e38acc5ec::t_189cfb1a0cf64b 1-114
+widget/src/highlights.ts
+  s_4f987e38acc5ec::t_bcd2f302425813 1-49
+widget/src/main.tsx
+  s_4f987e38acc5ec::t_d012be78d039f6 1-27
+widget/src/overlays.tsx
+  s_4f987e38acc5ec::t_4ec22057dab9bf 1-191
+widget/src/styles.ts
+  s_4f987e38acc5ec::t_cf1fb073acb3e8 1-163
+widget/src/ui.tsx
+  s_4f987e38acc5ec::t_24b8254a2a31fd 1-224
+widget/tsconfig.json
+  s_4f987e38acc5ec::t_a9418c73be06b4 1-14
+README.md
+  s_4f987e38acc5ec::t_9a8571efb91ad8 1-88
+scripts/migrate.mjs
+  s_4f987e38acc5ec::t_fe6924819e6cf6 1-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c29fb2159d2dabe6134a980ecf258a61f453b197",
+  "prompts": {},
+  "sessions": {
+    "s_4f987e38acc5ec": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "120ed832-ae18-455c-a7c5-750a826f7c1a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Kevin Manson <433017+neolitec@users.noreply.github.com>"
+    }
+  }
+}
