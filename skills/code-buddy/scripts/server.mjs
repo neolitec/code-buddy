@@ -51,18 +51,35 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     ...headers,
     ...(json && { 'content-type': 'application/json' }),
+    'x-content-type-options': 'nosniff',
     'cache-control': 'no-store',
   })
   res.end(json)
+}
+
+/** A request the client got wrong: its status and message are safe to send back. */
+class ClientError extends Error {
+  /**
+   * @param {number} status
+   * @param {string} message
+   */
+  constructor(status, message) {
+    super(message)
+    this.status = status
+  }
 }
 
 async function readJson(req) {
   let raw = ''
   for await (const chunk of req) {
     raw += chunk
-    if (raw.length > 100_000) throw new Error('body too large')
+    if (raw.length > 100_000) throw new ClientError(413, 'body too large')
   }
-  return raw ? JSON.parse(raw) : {}
+  try {
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    throw new ClientError(400, 'invalid JSON')
+  }
 }
 
 function sanitiseElement(element) {
@@ -225,9 +242,18 @@ async function tick(first) {
 }
 
 const server = http.createServer((req, res) => {
-  handle(req, res).catch((error) =>
-    send(res, 500, { error: error.message }, corsHeaders(req.headers.origin)),
-  )
+  handle(req, res).catch((error) => {
+    const cors = corsHeaders(req.headers.origin)
+    if (error instanceof ClientError) {
+      send(res, error.status, { error: error.message }, cors)
+      return
+    }
+    // Internal details stay in the server's log, never in a response.
+    console.error(
+      `code-buddy server: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+    )
+    send(res, 500, { error: 'internal error' }, cors)
+  })
 })
 
 server.on('error', async (/** @type {NodeJS.ErrnoException} */ error) => {

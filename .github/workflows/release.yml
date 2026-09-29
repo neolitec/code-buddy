@@ -62,13 +62,16 @@ jobs:
       - name: Format, lint, type-check and build
         run: npm run check
 
+      # Scorecard's alerts rate the project's practices, not its code: they do not block.
       - name: No open code scanning alert
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          open=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" --jq length)
-          if [ "$open" != "0" ]; then
-            echo "::error::$open open code scanning alert(s): fix or dismiss them before releasing."
+          open=$(gh api --paginate "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" \
+            --jq '.[] | select(.tool.name != "Scorecard") | "\(.tool.name) #\(.number) \(.rule.id) \(.html_url)"')
+          if [ -n "$open" ]; then
+            echo "$open"
+            echo "::error::open code scanning alerts: fix or dismiss them before releasing."
             exit 1
           fi
 

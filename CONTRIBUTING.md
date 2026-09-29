@@ -122,7 +122,8 @@ updates: merging to `main` ships nothing. To release:
    release needs: the version matches `plugin.json` and is greater than the
    last release, its tag is new, its changelog section is dated and filled
    with `Unreleased` empty, no dependency has a known vulnerability, and no
-   code scanning alert is open.
+   CodeQL or zizmor alert is open (Scorecard's alerts rate the project's
+   practices and do not block).
 4. The **Publish to stable** job waits for a maintainer's approval in the
    `release` environment. It then commits the verified tree with its built
    widget on `stable` (its parents: the previous release and the verified
