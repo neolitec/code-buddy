@@ -223,12 +223,24 @@ export default function App({ root }: { root: Element }) {
     }
   }, [root])
 
-  // Floating: the page's <main> makes room for the panel. Docked: the whole page is squeezed.
+  // Floating: the page's <main> makes room for the panel, only as much as the panel covers it.
+  // Docked: the whole page is squeezed.
   useEffect(() => {
     const content = document.querySelector<HTMLElement>('main')
-    if (content) content.style.paddingRight = open && !docked ? `${width + 32}px` : ''
     document.body.style.paddingRight = open && docked ? `${width}px` : ''
+    const fit = () => {
+      if (!content) return
+      content.style.paddingRight = ''
+      if (!open || docked) return
+      const covered = content.getBoundingClientRect().right - (window.innerWidth - width - 32)
+      if (covered <= 0) return
+      const own = parseFloat(getComputedStyle(content).paddingRight) || 0
+      content.style.paddingRight = `${Math.round(own + covered)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
     return () => {
+      window.removeEventListener('resize', fit)
       if (content) content.style.paddingRight = ''
       document.body.style.paddingRight = ''
     }
