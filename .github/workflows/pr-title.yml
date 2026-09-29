@@ -13,6 +13,9 @@ concurrency:
 jobs:
   title:
     name: Check title
+    # Dependabot writes its own titles ("chore(deps): Bump …"); a skipped job still
+    # satisfies the required check.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

@@ -27,6 +27,11 @@ updates:
     commit-message:
       prefix: ci
       include: scope
+    # Majors apart: they are merged by hand, and must not hold back the others.
     groups:
-      actions:
+      actions-minor-and-patch:
         patterns: ['*']
+        update-types: [minor, patch]
+      actions-major:
+        patterns: ['*']
+        update-types: [major]

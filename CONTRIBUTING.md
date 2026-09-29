@@ -85,6 +85,8 @@ widget bundles React. Adding one is a design decision; ask in an issue first.
 
 - Versions are pinned exactly (`save-exact=true`); the lockfile is committed.
 - Dependabot proposes updates weekly, a week after their release, grouped.
+  Minor and patch updates merge on their own once every required check passes;
+  majors wait for a maintainer, who reads their changelogs first.
 - CI rejects dependencies with known vulnerabilities or non-permissive licenses.
 
 ## Pull requests
