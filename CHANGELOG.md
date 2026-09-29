@@ -7,6 +7,17 @@ release bumps `version` in `.claude-plugin/plugin.json`.
 
 ## Unreleased
 
+### Added
+
+- A mascot drifts at the bottom of the panel, in its own strip so it never
+  covers the comments. It keeps still under `prefers-reduced-motion`, and is
+  hidden when the window is under 560 px tall.
+
+### Fixed
+
+- Leaving a new comment or a thread on a page without comments showed an
+  empty panel; it now returns to the open comments.
+
 ## 0.1.0 - 2026-09-29
 
 First versioned release.

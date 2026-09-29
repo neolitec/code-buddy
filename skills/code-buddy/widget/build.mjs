@@ -7,6 +7,8 @@ await build({
   format: 'esm',
   target: 'es2022',
   jsx: 'automatic',
+  // Small images are inlined: the widget stays a single file.
+  loader: { '.webp': 'dataurl' },
   minify: true,
   legalComments: 'none',
   define: { 'process.env.NODE_ENV': '"production"' },

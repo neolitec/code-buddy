@@ -39,6 +39,7 @@ import {
   Toggle,
   toast,
 } from './ui'
+import buddy from './assets/buddy.webp'
 
 const PANEL_WIDTH = 380
 const MIN_PANEL_WIDTH = 320
@@ -346,6 +347,17 @@ export default function App({ root }: { root: Element }) {
     : undefined
 
   const drafting = view === 'page' && !!draft
+
+  // The page view lists only this page's comments: leaving a draft or a thread
+  // for an empty one showed a blank panel, so fall back to the open comments.
+  const backToList = () => {
+    setThreadId(undefined)
+    setDraft(undefined)
+    if (view === 'page' && comments.length === 0) {
+      setView('all')
+      setStatusFilter('open')
+    }
+  }
   const outlined = target ?? flash
 
   const centerOn = (anchor: ReviewAnchor, id?: string) => {
@@ -703,10 +715,7 @@ export default function App({ root }: { root: Element }) {
                 <IconButton
                   icon="arrow-left"
                   label="Back to the list"
-                  onClick={() => {
-                    setThreadId(undefined)
-                    setDraft(undefined)
-                  }}
+                  onClick={backToList}
                 />
               )}
               <h2>
@@ -770,11 +779,11 @@ export default function App({ root }: { root: Element }) {
                   onChange={(event) => setDraft({ ...draft, body: event.target.value })}
                   onKeyDown={(event) => {
                     if (submitOnEnter(event, busy)) return
-                    if (event.key === 'Escape' && !draft.body.trim()) setDraft(undefined)
+                    if (event.key === 'Escape' && !draft.body.trim()) backToList()
                   }}
                 />
                 <div className="cb-actions">
-                  <Button variant="secondary" onClick={() => setDraft(undefined)}>
+                  <Button variant="secondary" onClick={backToList}>
                     Cancel
                   </Button>
                   <Button type="submit" disabled={!draft.body.trim() || busy}>
@@ -790,6 +799,9 @@ export default function App({ root }: { root: Element }) {
               comments
                 .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
                 .map((comment) => renderSummary(comment, false))}
+          </div>
+          <div className="cb-buddy-slot">
+            <img className="cb-buddy" src={buddy} alt="" draggable={false} />
           </div>
         </section>
       )}

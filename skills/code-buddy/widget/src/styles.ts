@@ -99,6 +99,20 @@ code { font-family: var(--cb-mono); }
 .cb-title h2 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-header-actions { display: flex; align-items: center; gap: 2px; }
 .cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+/* The mascot has its own strip below the body rather than floating over it: in a short panel, padding
+   alone left it covering whatever the body showed. Its height leaves room for the drift, which never clips. */
+.cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; pointer-events: none; user-select: none; }
+.cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); animation: cb-float 4.8s ease-in-out infinite; }
+/* On a short screen the chat needs the room more than the mascot does. */
+@media (max-height: 560px) { .cb-buddy-slot { display: none; } }
+/* A slow drift, bob and tilt; translateX(-50%) is restated in every frame because the animation owns transform. */
+@keyframes cb-float {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-3deg); }
+  25% { transform: translateX(calc(-50% + 10px)) translateY(-10px) rotate(2deg); }
+  50% { transform: translateX(-50%) translateY(-4px) rotate(3deg); }
+  75% { transform: translateX(calc(-50% - 10px)) translateY(-12px) rotate(-1deg); }
+}
+@media (prefers-reduced-motion: reduce) { .cb-buddy { animation: none; } }
 .cb-form { display: flex; flex-direction: column; gap: 8px; }
 .cb-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .cb-empty { display: flex; justify-content: center; padding: 32px 0; }
