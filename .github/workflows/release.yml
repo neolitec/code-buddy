@@ -64,8 +64,10 @@ jobs:
 
       - name: Check the committed widget matches its sources
         run: |
-          if ! git diff --exit-code --stat -- skills/code-buddy/widget/dist; then
-            echo "::error::widget/dist/widget.js is out of date: run 'npm run build' and commit it."
+          # status, not diff: a generated file missing from the commit counts too.
+          if [ -n "$(git status --porcelain -- skills/code-buddy/widget/dist)" ]; then
+            git status --short -- skills/code-buddy/widget/dist
+            echo "::error::widget/dist is out of date: run 'npm run build' and commit it."
             exit 1
           fi
 

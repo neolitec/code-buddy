@@ -1,12 +1,31 @@
-# Code Buddy
+<p align="center">
+  <img src=".github/assets/buddy.png" alt="Code Buddy's mascot, a small blue caterpillar" height="180">
+</p>
 
-[![CI](https://github.com/neolitec/code-buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/neolitec/code-buddy/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml/badge.svg)](https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/neolitec/code-buddy/badge)](https://scorecard.dev/viewer/?uri=github.com/neolitec/code-buddy)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h1 align="center">Code Buddy</h1>
 
-A [Claude Code](https://claude.com/claude-code) plugin that turns feedback on a
-running frontend app into code changes.
+<p align="center">
+  <strong>Comment on your running app. Claude makes the change.</strong><br>
+  A <a href="https://claude.com/claude-code">Claude Code</a> plugin that turns feedback on a
+  running frontend app into code changes.
+</p>
+
+<p align="center">
+  <a href="https://github.com/neolitec/code-buddy/actions/workflows/ci.yml"><img src="https://github.com/neolitec/code-buddy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml"><img src="https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/neolitec/code-buddy"><img src="https://api.scorecard.dev/projects/github.com/neolitec/code-buddy/badge" alt="OpenSSF Scorecard"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#in-the-widget">The widget</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
+
+---
 
 You comment directly on your dev app in the browser: select text, point at an
 element, or write about the page or the whole app. For each comment, Claude
@@ -17,7 +36,7 @@ to stop it.
 ## How it works
 
 - **The widget** is served by a small local server that the skill starts while
-  you run `/code-buddy`. No server, no widget: nothing runs when Claude is not
+  you run `/code-buddy:code-buddy`. No server, no widget: nothing runs when Claude is not
   watching.
 - **Your project** only gets a few lines: a dev-only loader snippet, a
   `.code-buddy.json` config, and a `.code-buddy/` folder for the comments
@@ -120,7 +139,8 @@ npm run build   # type-checks, then rebuilds dist/widget.js
 npm run check   # everything CI checks: format, lint, types, build
 ```
 
-`dist/widget.js` is committed so the plugin works without a build step. Rebuild
+`dist/widget.js` is committed so the plugin works without a build step, with
+`dist/THIRD_PARTY_LICENSES.txt`, the licenses of the packages it bundles. Rebuild
 it after every change to `widget/`, and commit it with the change; CI fails
 when it does not match its sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 the rest of the rules.

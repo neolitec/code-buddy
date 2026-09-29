@@ -6,14 +6,17 @@ export const WIDGET_CSS = `
   inset: 0;
   pointer-events: none;
   z-index: 2147483000;
-  --cb-accent: #1b64f2;
-  --cb-accent-strong: #1450c8;
-  --cb-accent-weak: #eaf1ff;
+  /* Blues of the mascot's body: accent and accent-strong are pixels of it, the
+     tints its median hue. Accent text keeps 4.5:1 on white and on accent-weak. */
+  --cb-accent: #216ec0;
+  --cb-accent-strong: #1759ad;
+  --cb-accent-weak: #e9f3fc;
+  --cb-accent-rgb: 33, 110, 192;
   --cb-text: #13294b;
   --cb-muted: #6b7a90;
-  --cb-border: #d9e2f1;
+  --cb-border: #d6e4f0;
   --cb-surface: #ffffff;
-  --cb-surface-2: #f4f7fd;
+  --cb-surface-2: #f5f9fc;
   --cb-green: #177a4c;
   --cb-green-bg: #e6f6ee;
   --cb-red: #d23f3f;
@@ -40,7 +43,7 @@ code { font-family: var(--cb-mono); }
   transition: background .15s, border-color .15s, color .15s;
 }
 .cb-btn:hover { background: var(--cb-accent-strong); }
-.cb-btn:disabled { cursor: default; background: var(--cb-accent-weak); color: #9db5e6; }
+.cb-btn:disabled { cursor: default; background: var(--cb-accent-weak); color: #9cbfde; }
 .cb-btn--secondary { background: var(--cb-surface); color: var(--cb-accent); border-color: var(--cb-border); }
 .cb-btn--secondary:hover { background: var(--cb-surface-2); border-color: var(--cb-accent); }
 .cb-btn--tertiary { background: transparent; color: var(--cb-accent); }
@@ -61,7 +64,7 @@ code { font-family: var(--cb-mono); }
 
 .cb-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .cb-chip--open { background: var(--cb-accent-weak); color: var(--cb-accent); }
-.cb-chip--claimed { background: #e3f0ff; color: #1767c7; }
+.cb-chip--claimed { background: #dcebf8; color: var(--cb-accent-strong); }
 .cb-chip--resolved { background: var(--cb-green-bg); color: var(--cb-green); }
 
 .cb-textarea {
@@ -70,7 +73,7 @@ code { font-family: var(--cb-mono); }
   background: var(--cb-surface-2); outline: none;
 }
 .cb-textarea:focus { border-color: var(--cb-accent); }
-.cb-textarea::placeholder { color: #7f9cd6; font-style: italic; }
+.cb-textarea::placeholder { color: #6498c4; font-style: italic; }
 
 .cb-checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--cb-accent); }
 .cb-checkbox input { width: 16px; height: 16px; margin: 0; accent-color: var(--cb-accent); }
@@ -99,6 +102,28 @@ code { font-family: var(--cb-mono); }
 .cb-title h2 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-header-actions { display: flex; align-items: center; gap: 2px; }
 .cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+/* The mascot has its own strip below the body rather than floating over it: in a short panel, padding
+   alone left it covering whatever the body showed. Its height leaves room for the drift, which never clips. */
+.cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; pointer-events: none; user-select: none; }
+.cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); animation: cb-float 4.8s ease-in-out infinite; }
+/* On a short screen the chat needs the room more than the mascot does. */
+@media (max-height: 560px) {
+  .cb-buddy-slot { display: none; }
+  /* Without the strip, the footer sits over the body's end: keep it clear. */
+  .cb-body { padding-bottom: 36px; }
+}
+/* Version and project link, in the panel's bottom-right corner. */
+.cb-footer { position: absolute; right: 16px; bottom: 12px; font-size: 11px; color: var(--cb-muted); }
+.cb-footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.cb-footer a:hover { color: var(--cb-accent); }
+/* A slow drift, bob and tilt; translateX(-50%) is restated in every frame because the animation owns transform. */
+@keyframes cb-float {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-3deg); }
+  25% { transform: translateX(calc(-50% + 10px)) translateY(-10px) rotate(2deg); }
+  50% { transform: translateX(-50%) translateY(-4px) rotate(3deg); }
+  75% { transform: translateX(calc(-50% - 10px)) translateY(-12px) rotate(-1deg); }
+}
+@media (prefers-reduced-motion: reduce) { .cb-buddy { animation: none; } }
 .cb-form { display: flex; flex-direction: column; gap: 8px; }
 .cb-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .cb-empty { display: flex; justify-content: center; padding: 32px 0; }
@@ -146,8 +171,8 @@ code { font-family: var(--cb-mono); }
 .cb-mark { position: fixed; pointer-events: none; border: 2px solid var(--cb-yellow); border-radius: 4px; background: rgba(255, 196, 0, .1); }
 .cb-mark--active { border-color: var(--cb-red); background: rgba(255, 140, 0, .12); }
 .cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-yellow-dark); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(0, 120, 255, .12); box-shadow: 0 0 0 4px rgba(0, 120, 255, .18); }
-.cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(0, 120, 255, .08); }
+.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
+.cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
 .cb-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--cb-radius); background: var(--cb-text); color: #fff; font-size: 13px; pointer-events: none; }
 

@@ -7,6 +7,26 @@ release bumps `version` in `.claude-plugin/plugin.json`.
 
 ## Unreleased
 
+### Added
+
+- A mascot drifts at the bottom of the panel, in its own strip so it never
+  covers the comments. It keeps still under `prefers-reduced-motion`, and is
+  hidden when the window is under 560 px tall.
+- The panel's bottom-right corner shows the plugin's version and links to the
+  project on GitHub.
+
+### Changed
+
+- The widget's blues come from the mascot's body, keeping readable contrast.
+
+### Fixed
+
+- The widget bundles React without its license notice: the notices now stay in
+  `widget.js`, and `dist/THIRD_PARTY_LICENSES.txt` carries the full license of
+  every bundled package.
+- Leaving a new comment or a thread on a page without comments showed an
+  empty panel; it now returns to the open comments.
+
 ## 0.1.0 - 2026-09-29
 
 First versioned release.
