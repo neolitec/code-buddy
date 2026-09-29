@@ -191,3 +191,60 @@ code { font-family: var(--cb-mono); }
 ::highlight(code-buddy) { background-color: rgba(255, 213, 79, 0.45); }
 ::highlight(code-buddy-active) { background-color: rgba(255, 152, 0, 0.55); }
 `;var xv=Ut(ql(),1),Tv="code-buddy-widget";function Av(){if(document.querySelector(Tv))return;let t=document.createElement(Tv);t.setAttribute("data-code-buddy",""),document.body.append(t);let l=document.createElement("style");l.setAttribute("data-code-buddy",""),l.textContent=Ev,document.head.append(l);let e=t.attachShadow({mode:"open"}),a=document.createElement("style");a.textContent=Sv;let n=document.createElement("div");e.append(a,n),(0,zv.createRoot)(n).render((0,xv.jsx)(Do,{root:document.body}))}document.body?Av():document.addEventListener("DOMContentLoaded",Av,{once:!0});
+/*! Bundled license information:
+
+scheduler/cjs/scheduler.production.js:
+  (**
+   * @license React
+   * scheduler.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+react/cjs/react.production.js:
+  (**
+   * @license React
+   * react.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+react-dom/cjs/react-dom.production.js:
+  (**
+   * @license React
+   * react-dom.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+react-dom/cjs/react-dom-client.production.js:
+  (**
+   * @license React
+   * react-dom-client.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+react/cjs/react-jsx-runtime.production.js:
+  (**
+   * @license React
+   * react-jsx-runtime.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+*/

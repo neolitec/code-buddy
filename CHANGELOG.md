@@ -21,6 +21,9 @@ release bumps `version` in `.claude-plugin/plugin.json`.
 
 ### Fixed
 
+- The widget bundles React without its license notice: the notices now stay in
+  `widget.js`, and `dist/THIRD_PARTY_LICENSES.txt` carries the full license of
+  every bundled package.
 - Leaving a new comment or a thread on a page without comments showed an
   empty panel; it now returns to the open comments.
 

@@ -139,7 +139,8 @@ npm run build   # type-checks, then rebuilds dist/widget.js
 npm run check   # everything CI checks: format, lint, types, build
 ```
 
-`dist/widget.js` is committed so the plugin works without a build step. Rebuild
+`dist/widget.js` is committed so the plugin works without a build step, with
+`dist/THIRD_PARTY_LICENSES.txt`, the licenses of the packages it bundles. Rebuild
 it after every change to `widget/`, and commit it with the change; CI fails
 when it does not match its sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for
 the rest of the rules.

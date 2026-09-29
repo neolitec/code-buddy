@@ -60,14 +60,14 @@ It runs, in order:
 | `npm run format:check` | [Prettier](https://prettier.io); `npm run format` fixes it           |
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
-| `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`      |
+| `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
 
 Rules that go with them:
 
 - **Widget changes ship with their build.** When you change anything under
   `widget/` (sources, build config, dependencies), run `npm run build` and
-  commit `widget/dist/widget.js` with the change. CI rebuilds it and fails if
-  the committed file differs. Never edit `dist/` by hand.
+  commit `widget/dist/` with the change. CI rebuilds it and fails if the
+  committed files differ. Never edit `dist/` by hand.
 - **Scripts are plain JavaScript with JSDoc types**, type-checked by TypeScript.
   Add types where the checker needs them rather than silencing it.
 - **Lint exceptions are rare and explained.** Disable a rule for one line only,
@@ -114,7 +114,7 @@ to `main` alone ships nothing. To release:
    ([semver](https://semver.org): patch for fixes, minor for features, major
    for breaking changes to commands or `.code-buddy.json`), moves the
    `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading, and commits
-   the rebuilt `widget/dist/widget.js` (`npm run build`): the widget shows the
+   the rebuilt `widget/dist/` (`npm run build`): the widget shows the
    version, so CI fails until it is rebuilt.
 2. Once it is merged, run **Actions → Release → Run workflow** on `main`, with
    the version. Nothing is tagged or published otherwise: merging to `main`
