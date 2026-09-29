@@ -85,10 +85,14 @@ if (unreleased === undefined) {
 } else if (unreleased.replace(/^Unreleased.*$/m, '').trim()) {
   problems.push('CHANGELOG.md: move the "Unreleased" entries under the version released')
 }
-const escaped = requested.replaceAll('.', '\\.')
-const section = sections.find((s) =>
-  new RegExp(`^${escaped} - \\d{4}-\\d{2}-\\d{2}\\s`).test(s),
-)
+// A plain prefix, not a pattern built from the input.
+const section = sections.find((s) => {
+  const heading = s.slice(0, s.indexOf('\n'))
+  return (
+    heading.startsWith(`${requested} - `) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(heading.slice(requested.length + 3))
+  )
+})
 const notes = section?.replace(/^.*\n/, '').trim()
 if (!notes) {
   problems.push(`CHANGELOG.md: add a filled "## ${requested} - YYYY-MM-DD" section`)

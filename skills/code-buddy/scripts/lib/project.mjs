@@ -56,11 +56,17 @@ export function project(root) {
 /**
  * The project root served on `port` by a code-buddy server. Rejects when nothing
  * answers there; resolves to undefined when something else does.
- * @param {number} port
+ * @param {number | string} port
  * @returns {Promise<string | undefined>}
  */
 export async function servedProject(port) {
-  const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+  const value = Number(port)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new RangeError(`invalid port: ${String(port)}`)
+  }
+  const url = new URL('/api/health', 'http://127.0.0.1')
+  url.port = String(value)
+  const health = await (await fetch(url)).json()
   return typeof health === 'object' &&
     health !== null &&
     'project' in health &&
