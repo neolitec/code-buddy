@@ -17,5 +17,7 @@ versioned releases yet: installs follow the latest commit of `main`.
 ### Fixed
 
 - Hooks failed with `MODULE_NOT_FOUND` when Code Buddy ran as a plugin.
+- The floating panel squeezed the page; it now floats over it, and only the
+  docked panel makes room.
 - The widget's API client dropped request headers passed as a `Headers` object
   or an array.
