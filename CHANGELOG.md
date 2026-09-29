@@ -37,6 +37,9 @@ First release.
   docked panel makes room.
 - Leaving a new comment or a thread on a page without comments showed an
   empty panel; it now returns to the open comments.
+- The server sent the text of its exceptions to the browser; it now answers
+  with fixed messages (400 invalid JSON, 413 body too large, 500 internal
+  error) and logs the details.
 - The widget's API client dropped request headers passed as a `Headers` object
   or an array.
 - The widget bundled React without its license notice: the notices now stay in
