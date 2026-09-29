@@ -15,18 +15,18 @@ hooks:
     - matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash'
       hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/scripts/hook.mjs"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
           timeout: 60
   PostToolUse:
     - matcher: '*'
       hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/scripts/hook.mjs"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
           timeout: 10
   SubagentStop:
     - hooks:
         - type: command
-          command: 'node "${CLAUDE_SKILL_DIR}/scripts/hook.mjs"'
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
           timeout: 10
 ---
 
