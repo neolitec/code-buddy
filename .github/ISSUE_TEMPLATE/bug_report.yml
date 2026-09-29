@@ -14,6 +14,14 @@ body:
           required: true
         - label: I am on the latest version (`claude plugin marketplace update code-buddy`).
           required: true
+  - type: input
+    id: version
+    attributes:
+      label: Code Buddy version
+      description: '`version` in `.claude-plugin/plugin.json`, or `claude plugin details code-buddy`.'
+      placeholder: 0.1.0
+    validations:
+      required: true
   - type: textarea
     id: what-happened
     attributes:

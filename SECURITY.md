@@ -6,8 +6,8 @@ reports about it seriously.
 
 ## Supported versions
 
-Code Buddy has no releases yet: only the latest commit of `main` is supported.
-Update with `claude plugin marketplace update code-buddy` before reporting.
+Only the latest release is supported: fixes ship as a new version. Update with
+`claude plugin marketplace update code-buddy` before reporting.
 
 ## Reporting a vulnerability
 

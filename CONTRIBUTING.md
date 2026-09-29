@@ -101,6 +101,22 @@ widget bundles React. Adding one is a design decision; ask in an issue first.
   and new commits after an approval need a new one.
 - Code owners review changes to CI, the security policy and the manifests.
 
+## Releases
+
+Maintainers release; contributors only add their change under `## Unreleased`
+in [`CHANGELOG.md`](CHANGELOG.md).
+
+Users receive a change only when `version` in
+[`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) changes, so merging
+to `main` alone ships nothing. To release:
+
+1. Open a `chore: release x.y.z` pull request that sets `version`
+   ([semver](https://semver.org): patch for fixes, minor for features, major
+   for breaking changes to commands or `.code-buddy.json`) and moves the
+   `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading.
+2. After it is merged, tag the merge commit `vx.y.z` and publish a GitHub
+   release with the changelog section as notes.
+
 ## Using Claude Code on this repository
 
 Contributions made with Claude Code are welcome. [`CLAUDE.md`](CLAUDE.md) gives

@@ -1,10 +1,15 @@
 # Changelog
 
 Notable changes to Code Buddy. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Code Buddy has no
-versioned releases yet: installs follow the latest commit of `main`.
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org). Users receive a change when a
+release bumps `version` in `.claude-plugin/plugin.json`.
 
 ## Unreleased
+
+## 0.1.0 - 2026-09-29
+
+First versioned release.
 
 ### Added
 

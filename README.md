@@ -41,8 +41,9 @@ claude plugin install code-buddy@code-buddy
 ```
 
 Or, inside a session: `/plugin marketplace add neolitec/code-buddy`, then
-`/plugin install code-buddy@code-buddy`. Get updates with
-`claude plugin marketplace update code-buddy`.
+`/plugin install code-buddy@code-buddy`. Get new versions with
+`claude plugin marketplace update code-buddy`, or turn on auto-update for the
+marketplace in `/plugin`; the [changelog](CHANGELOG.md) lists what each brings.
 
 Requires Claude Code and Node.js 22 or later.
 
