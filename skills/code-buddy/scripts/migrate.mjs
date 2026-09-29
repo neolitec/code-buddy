@@ -30,7 +30,7 @@ try {
   const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
   if (health.project === root) {
     console.error(
-      `a ${LEGACY.name} session still serves this project on port ${port}: close it, then migrate again`
+      `a ${LEGACY.name} session still serves this project on port ${port}: close it, then migrate again`,
     )
     process.exit(3)
   }
@@ -65,7 +65,7 @@ if (gitignore?.includes(`/${oldDir}/`)) {
     at('.gitignore'),
     gitignore
       .replaceAll(`/${oldDir}/`, `/${newDir}/`)
-      .replaceAll(`# ${LEGACY.name} skill`, '# code-buddy skill')
+      .replaceAll(`# ${LEGACY.name} skill`, '# code-buddy skill'),
   )
   done.push('updated .gitignore')
 }

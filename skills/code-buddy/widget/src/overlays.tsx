@@ -76,7 +76,12 @@ export function ElementMarks({
         <div
           key={mark.id}
           className={`cb-mark ${mark.id === activeId ? 'cb-mark--active' : ''}`}
-          style={{ top: mark.top, left: mark.left, width: mark.width, height: mark.height }}
+          style={{
+            top: mark.top,
+            left: mark.left,
+            width: mark.width,
+            height: mark.height,
+          }}
         >
           <span className="cb-pin">{mark.index}</span>
         </div>
@@ -102,7 +107,7 @@ export function TargetOutline({ element }: { element: Element }) {
         next.top < window.innerHeight &&
         next.left < window.innerWidth
       setBox((current) =>
-        !onScreen ? undefined : sameBox(current, next) ? current : next
+        !onScreen ? undefined : sameBox(current, next) ? current : next,
       )
       frame = requestAnimationFrame(track)
     }
@@ -181,7 +186,12 @@ export function ElementPicker({
       {rect && (
         <div
           className="cb-hover"
-          style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
+          style={{
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+          }}
         >
           <span>{hovered?.tagName.toLowerCase()}</span>
         </div>

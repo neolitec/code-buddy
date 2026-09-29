@@ -1,8 +1,4 @@
-import {
-  type ReviewAnchor,
-  type ReviewElement,
-  normaliseQuote,
-} from './domain'
+import { type ReviewAnchor, type ReviewElement, normaliseQuote } from './domain'
 
 const HEADINGS = 'h1, h2, h3'
 const WIDGET = '[data-code-buddy]'
@@ -68,11 +64,7 @@ function rangeOf(index: TextIndex, start: number, end: number): Range {
 
 function occurrencesOf(text: string, quote: string): number[] {
   const found: number[] = []
-  for (
-    let at = text.indexOf(quote);
-    at !== -1;
-    at = text.indexOf(quote, at + 1)
-  ) {
+  for (let at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) {
     found.push(at)
   }
   return found
@@ -83,8 +75,7 @@ function sectionOf(root: Element, range: Range): string {
   root.querySelectorAll(HEADINGS).forEach((heading) => {
     if (heading.closest(WIDGET)) return
     const before =
-      range.compareBoundaryPoints(Range.START_TO_START, rangeAround(heading)) >=
-      0
+      range.compareBoundaryPoints(Range.START_TO_START, rangeAround(heading)) >= 0
     if (before) section = heading.textContent?.trim() ?? section
   })
   return section
@@ -99,13 +90,12 @@ function rangeAround(element: Element): Range {
 /** Describes a user selection so it can be found again on a later render. */
 export function anchorFromSelection(
   root: Element,
-  selection: Selection
+  selection: Selection,
 ): ReviewAnchor | undefined {
   if (selection.rangeCount === 0 || selection.isCollapsed) return undefined
   const range = selection.getRangeAt(0)
   const container = range.commonAncestorContainer
-  const element =
-    container instanceof Element ? container : container.parentElement
+  const element = container instanceof Element ? container : container.parentElement
   if (!root.contains(container) || element?.closest(WIDGET)) {
     return undefined
   }
@@ -128,10 +118,7 @@ export function anchorFromSelection(
 }
 
 /** Finds the live Range for a stored anchor, if its quote is still on the page. */
-export function rangeFromAnchor(
-  root: Element,
-  anchor: ReviewAnchor
-): Range | undefined {
+export function rangeFromAnchor(root: Element, anchor: ReviewAnchor): Range | undefined {
   if (!anchor.quote) return undefined
   const index = indexText(root)
   const occurrences = occurrencesOf(index.text, anchor.quote)
@@ -148,7 +135,7 @@ function step(element: Element): string {
   const parent = element.parentElement
   if (!parent) return tag
   const siblings = Array.from(parent.children).filter(
-    (child) => child.tagName === element.tagName
+    (child) => child.tagName === element.tagName,
   )
   return siblings.length > 1
     ? `${tag}:nth-of-type(${siblings.indexOf(element) + 1})`
@@ -166,10 +153,7 @@ function selectorFor(root: Element, element: Element): string {
 }
 
 /** Describes a pointed-at element so it can be found and understood later. */
-export function anchorFromElement(
-  root: Element,
-  element: Element
-): ReviewAnchor {
+export function anchorFromElement(root: Element, element: Element): ReviewAnchor {
   const anchor: ReviewElement = {
     selector: selectorFor(root, element),
     tag: element.tagName.toLowerCase(),
@@ -186,7 +170,7 @@ export function anchorFromElement(
 
 export function elementFromAnchor(
   root: Element,
-  anchor: ReviewAnchor
+  anchor: ReviewAnchor,
 ): Element | undefined {
   if (!anchor.element) return undefined
   try {

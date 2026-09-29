@@ -26,7 +26,7 @@ if (command === 'status') {
   const result = await locks.acquire(owner, targets, timeoutS)
   if (!result.ok) {
     console.error(
-      `busy: ${result.target} is locked by ${result.holder}; released ${result.released.length} lock(s) held by ${owner}`
+      `busy: ${result.target} is locked by ${result.holder}; released ${result.released.length} lock(s) held by ${owner}`,
     )
     process.exit(3)
   }

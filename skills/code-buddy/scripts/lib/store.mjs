@@ -6,8 +6,7 @@ export const APP_ROUTE = '*'
 const PROGRESS_SHOWN = 6
 const WRITE_KINDS = new Set(['edit', 'write', 'multiedit'])
 
-export const isActive = (comment) =>
-  comment.status === 'open' && !comment.cancelledAt
+export const isActive = (comment) => comment.status === 'open' && !comment.cancelledAt
 
 /** The thread as a list, including the question and a legacy `resolution`. */
 export function threadOf(comment) {
@@ -70,9 +69,7 @@ export function createStore(project) {
     return {
       at: new Date().toISOString(),
       changed: [
-        ...new Set(
-          steps.filter((s) => WRITE_KINDS.has(s.kind)).map((s) => s.label)
-        ),
+        ...new Set(steps.filter((s) => WRITE_KINDS.has(s.kind)).map((s) => s.label)),
       ],
       steps: steps.length,
     }
@@ -85,14 +82,14 @@ export function createStore(project) {
     list(route) {
       return serialise(async () => {
         const comments = (await readAll()).filter(
-          (c) => route === undefined || c.route === route || c.route === APP_ROUTE
+          (c) => route === undefined || c.route === route || c.route === APP_ROUTE,
         )
         return Promise.all(
           comments.map(async (c) =>
             isActive(c) && c.claimedAt
               ? { ...c, progress: await readProgress(c.id, PROGRESS_SHOWN) }
-              : c
-          )
+              : c,
+          ),
         )
       })
     },
@@ -129,10 +126,7 @@ export function createStore(project) {
         if (text && cancelled === false) {
           const last = current.messages?.at(-1)
           if (last?.author === 'reader') {
-            fields.messages = [
-              ...current.messages.slice(0, -1),
-              { ...last, body: text },
-            ]
+            fields.messages = [...current.messages.slice(0, -1), { ...last, body: text }]
           } else {
             fields.body = text
           }
@@ -146,13 +140,9 @@ export function createStore(project) {
             : cancelled === false || fields.status
               ? undefined
               : current.cancelledAt,
-          cancellation: cancelling
-            ? await cancellationOf(id)
-            : current.cancellation,
+          cancellation: cancelling ? await cancellationOf(id) : current.cancellation,
           claimedAt:
-            fields.status || cancelled !== undefined
-              ? undefined
-              : current.claimedAt,
+            fields.status || cancelled !== undefined ? undefined : current.claimedAt,
           resolvedAt:
             fields.status === 'resolved' && current.status !== 'resolved'
               ? now

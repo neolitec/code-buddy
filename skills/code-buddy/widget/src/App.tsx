@@ -8,11 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  anchorFromElement,
-  anchorFromSelection,
-  elementFromAnchor,
-} from './anchors'
+import { anchorFromElement, anchorFromSelection, elementFromAnchor } from './anchors'
 import {
   createComment,
   deleteComment,
@@ -139,10 +135,7 @@ function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
   return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
-const submitOnEnter = (
-  event: KeyboardEvent<HTMLTextAreaElement>,
-  busy: boolean
-) => {
+const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>, busy: boolean) => {
   if (event.nativeEvent.isComposing) return false
   if (event.key !== 'Enter' || event.shiftKey) return false
   event.preventDefault()
@@ -159,7 +152,7 @@ export default function App({ root }: { root: Element }) {
   const [view, setView] = useState<View>(saved?.view ?? 'page')
   const [threadId, setThreadId] = useState(saved?.threadId)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    saved?.statusFilter ?? 'open'
+    saved?.statusFilter ?? 'open',
   )
   const [dragging, setDragging] = useState(false)
   const [draft, setDraft] = useState<Draft>()
@@ -171,7 +164,7 @@ export default function App({ root }: { root: Element }) {
   const [picking, setPicking] = useState(false)
   const [target, setTarget] = useState<Element>()
   const [pendingCenter, setPendingCenter] = useState(
-    readSession<PendingCenter>(CENTER_KEY)
+    readSession<PendingCenter>(CENTER_KEY),
   )
   const [flash, setFlash] = useState<Element>()
   const [resend, setResend] = useState<{ id: string; body: string }>()
@@ -233,10 +226,7 @@ export default function App({ root }: { root: Element }) {
 
   const clampWidth = (value: number) =>
     Math.round(
-      Math.min(
-        Math.max(value, MIN_PANEL_WIDTH),
-        window.innerWidth * MAX_PANEL_RATIO
-      )
+      Math.min(Math.max(value, MIN_PANEL_WIDTH), window.innerWidth * MAX_PANEL_RATIO),
     )
 
   const toggleDocked = () => {
@@ -302,7 +292,7 @@ export default function App({ root }: { root: Element }) {
 
   const pickElement = useCallback(
     (element: Element) => startDraft(anchorFromElement(root, element)),
-    [root, startDraft]
+    [root, startDraft],
   )
 
   const cancelPick = useCallback(() => setPicking(false), [])
@@ -367,8 +357,7 @@ export default function App({ root }: { root: Element }) {
   /** `href` is the comment's page, visited first when it is not this one. */
   const elementChip = (anchor: ReviewAnchor, href?: string, id?: string) => {
     if (!anchor.element) return null
-    const onThisPage =
-      !href || new URL(href, window.location.href).pathname === route
+    const onThisPage = !href || new URL(href, window.location.href).pathname === route
     return (
       <span
         className="cb-element"
@@ -436,12 +425,10 @@ export default function App({ root }: { root: Element }) {
             </div>
           ) : (
             <p key={index}>
-              {messages.length > 2 && index > 0 && (
-                <span className="cb-author">You</span>
-              )}
+              {messages.length > 2 && index > 0 && <span className="cb-author">You</span>}
               {message.body}
             </p>
-          )
+          ),
         )}
       </div>
       {isActive(comment) &&
@@ -506,9 +493,7 @@ export default function App({ root }: { root: Element }) {
           <Textarea
             aria-label="Edit the comment before sending it again"
             value={resend?.id === comment.id ? resend.body : latestText(comment)}
-            onChange={(event) =>
-              setResend({ id: comment.id, body: event.target.value })
-            }
+            onChange={(event) => setResend({ id: comment.id, body: event.target.value })}
           />
           <div className="cb-actions">
             <Button small type="submit" icon="send" disabled={busy}>
@@ -661,7 +646,9 @@ export default function App({ root }: { root: Element }) {
     <div className="cb">
       <ElementMarks root={root} comments={comments} activeId={activeId} />
       {outlined && <TargetOutline element={outlined} />}
-      {picking && <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />}
+      {picking && (
+        <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />
+      )}
       {selectionButton && (
         <Button
           small
@@ -756,7 +743,9 @@ export default function App({ root }: { root: Element }) {
             {drafting && (
               <form className="cb-form" onSubmit={submit}>
                 {draft.section && <span className="cb-section">{draft.section}</span>}
-                {draft.quote && <blockquote className="cb-quote">{draft.quote}</blockquote>}
+                {draft.quote && (
+                  <blockquote className="cb-quote">{draft.quote}</blockquote>
+                )}
                 {elementChip(draft)}
                 {!draft.quote && !draft.element && (
                   <Checkbox

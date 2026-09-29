@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 export const CONFIG_FILE = '.code-buddy.json'
 export const SKILL_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../..'
+  '../..',
 )
 export const WIDGET_VERSION = 1
 
@@ -37,7 +37,7 @@ export function project(root) {
   const config = JSON.parse(readFileSync(path.join(root, CONFIG_FILE), 'utf8'))
   const state = path.join(
     STATE_ROOT,
-    createHash('sha1').update(root).digest('hex').slice(0, 12)
+    createHash('sha1').update(root).digest('hex').slice(0, 12),
   )
   return {
     root,
@@ -46,7 +46,7 @@ export function project(root) {
       root,
       process.env.CODE_BUDDY_COMMENTS_FILE ??
         config.commentsFile ??
-        '.code-buddy/comments.json'
+        '.code-buddy/comments.json',
     ),
     locksDir: path.join(state, 'locks'),
     progressDir: path.join(state, 'progress'),

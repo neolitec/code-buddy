@@ -22,7 +22,7 @@ if (!comment) {
 }
 if (!release && (comment.status !== 'open' || comment.cancelledAt)) {
   console.error(
-    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; stop working on it`
+    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; stop working on it`,
   )
   process.exit(1)
 }

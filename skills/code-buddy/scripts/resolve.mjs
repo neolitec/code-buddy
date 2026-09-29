@@ -13,12 +13,10 @@ async function readStdin() {
   return text
 }
 
-const answer = (
-  answerArg ?? (process.stdin.isTTY ? '' : await readStdin())
-).trim()
+const answer = (answerArg ?? (process.stdin.isTTY ? '' : await readStdin())).trim()
 if (!id || !project || !answer) {
   console.error(
-    'usage: resolve.mjs <id> --project <dir> "<answer>" (or the answer on stdin)'
+    'usage: resolve.mjs <id> --project <dir> "<answer>" (or the answer on stdin)',
   )
   process.exit(2)
 }
@@ -32,7 +30,7 @@ if (!comment) {
 }
 if (comment.status !== 'open' || comment.cancelledAt) {
   console.error(
-    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; not resolving it`
+    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; not resolving it`,
   )
   process.exit(1)
 }

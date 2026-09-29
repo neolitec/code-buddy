@@ -18,10 +18,7 @@ export function createLocks(project) {
 
   function relativeTarget(target) {
     if (target === '@build') return target
-    const relative = path.relative(
-      project.root,
-      path.resolve(project.root, target)
-    )
+    const relative = path.relative(project.root, path.resolve(project.root, target))
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error(`${target} is outside the project`)
     }
@@ -31,7 +28,7 @@ export function createLocks(project) {
   async function readOwner(relative) {
     try {
       return JSON.parse(
-        await readFile(path.join(lockDir(relative), 'owner.json'), 'utf8')
+        await readFile(path.join(lockDir(relative), 'owner.json'), 'utf8'),
       )
     } catch {
       return undefined
@@ -43,9 +40,7 @@ export function createLocks(project) {
     try {
       const comments = JSON.parse(await readFile(project.commentsFile, 'utf8'))
       return new Set(
-        comments
-          .filter((c) => c.status === 'open' && !c.cancelledAt)
-          .map((c) => c.id)
+        comments.filter((c) => c.status === 'open' && !c.cancelledAt).map((c) => c.id),
       )
     } catch {
       return undefined
@@ -83,7 +78,7 @@ export function createLocks(project) {
     }
     await writeFile(
       path.join(dir, 'owner.json'),
-      JSON.stringify({ owner, at: Date.now() })
+      JSON.stringify({ owner, at: Date.now() }),
     )
     await mkdir(path.join(ownersDir, owner), { recursive: true })
     await writeFile(indexEntry(owner, relative), '')
@@ -100,9 +95,7 @@ export function createLocks(project) {
 
   async function heldBy(owner) {
     try {
-      return (await readdir(path.join(ownersDir, owner))).map(
-        decodeURIComponent
-      )
+      return (await readdir(path.join(ownersDir, owner))).map(decodeURIComponent)
     } catch {
       return []
     }

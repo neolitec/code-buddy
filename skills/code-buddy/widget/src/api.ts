@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import type {
-  NewReviewComment,
-  ReviewComment,
-  ReviewCommentPatch,
-} from './domain'
+import type { NewReviewComment, ReviewComment, ReviewCommentPatch } from './domain'
 
 const API = new URL('api/comments', new URL('.', import.meta.url)).href
 const POLL_ACTIVE_MS = 3000
@@ -62,9 +58,7 @@ export function useAllComments(enabled: boolean) {
   return usePolledComments(enabled ? `${API}?all=1` : undefined)
 }
 
-export async function createComment(
-  input: NewReviewComment
-): Promise<ReviewComment> {
+export async function createComment(input: NewReviewComment): Promise<ReviewComment> {
   const comment = await request<ReviewComment>(API, {
     method: 'POST',
     body: JSON.stringify(input),
@@ -75,7 +69,7 @@ export async function createComment(
 
 export async function updateComment(
   id: string,
-  patch: ReviewCommentPatch
+  patch: ReviewCommentPatch,
 ): Promise<ReviewComment> {
   const comment = await request<ReviewComment>(`${API}/${id}`, {
     method: 'PATCH',
@@ -103,6 +97,6 @@ export function useRoute(): string {
         window.removeEventListener('popstate', listener)
       }
     },
-    () => window.location.pathname
+    () => window.location.pathname,
   )
 }

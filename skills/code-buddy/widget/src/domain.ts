@@ -103,9 +103,7 @@ export function threadOf(comment: ReviewComment): ReviewMessage[] {
 }
 
 /** True for an open comment an agent should be working on. */
-export function isActive(
-  comment: Pick<ReviewComment, 'status' | 'cancelledAt'>
-) {
+export function isActive(comment: Pick<ReviewComment, 'status' | 'cancelledAt'>) {
   return comment.status === 'open' && !comment.cancelledAt
 }
 

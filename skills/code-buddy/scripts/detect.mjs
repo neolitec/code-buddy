@@ -98,13 +98,16 @@ function workspaceApps() {
 
 const scripts = pkg?.scripts ?? {}
 const run = (name) =>
-  scripts[name] && `${packageManager === 'npm' ? 'npm run' : (packageManager ?? 'npm run')} ${name}`
+  scripts[name] &&
+  `${packageManager === 'npm' ? 'npm run' : (packageManager ?? 'npm run')} ${name}`
 
 function devPort() {
   const dev = scripts.dev ?? scripts.start ?? ''
   const flagged = dev.match(/(?:--port|-p)[\s=](\d{2,5})/)?.[1]
   if (flagged) return Number(flagged)
-  const viteConfig = read(firstExisting(['vite.config.ts', 'vite.config.js', 'vite.config.mjs']) ?? '')
+  const viteConfig = read(
+    firstExisting(['vite.config.ts', 'vite.config.js', 'vite.config.mjs']) ?? '',
+  )
   const vitePort = viteConfig?.match(/port\s*:\s*(\d{2,5})/)?.[1]
   if (vitePort) return Number(vitePort)
   if (deps.next || deps['react-scripts']) return 3000
@@ -129,7 +132,7 @@ function next() {
     router,
     srcDir,
     instrumentationClient: firstExisting(
-      ['ts', 'js', 'tsx', 'jsx'].map((ext) => `${base}instrumentation-client.${ext}`)
+      ['ts', 'js', 'tsx', 'jsx'].map((ext) => `${base}instrumentation-client.${ext}`),
     ),
     supportsInstrumentationClient:
       major('next') > 15 || (major('next') === 15 && minor('next') >= 3),
@@ -140,7 +143,9 @@ function next() {
 function vite() {
   if (!deps.vite) return undefined
   const html = read('index.html')
-  const entry = html?.match(/<script[^>]+type=["']module["'][^>]+src=["']\/?([^"']+)["']/)?.[1]
+  const entry = html?.match(
+    /<script[^>]+type=["']module["'][^>]+src=["']\/?([^"']+)["']/,
+  )?.[1]
   return {
     config: firstExisting(['vite.config.ts', 'vite.config.js', 'vite.config.mjs']),
     entry,
@@ -187,9 +192,7 @@ const report = {
   isPackage: !!pkg,
   name: pkg?.name ?? path.basename(root),
   packageManager,
-  monorepo: workspaces?.length
-    ? { workspaces, apps: workspaceApps() }
-    : undefined,
+  monorepo: workspaces?.length ? { workspaces, apps: workspaceApps() } : undefined,
   frameworks,
   webFrontend: frameworks.some((f) => f.id !== 'webpack') || exists('index.html'),
   react: !!deps.react,
@@ -199,7 +202,9 @@ const report = {
   scripts: {
     dev: scripts.dev && run('dev'),
     build: scripts.build && run('build'),
-    typecheck: (scripts.typecheck && run('typecheck')) ?? (scripts['type-check'] && run('type-check')),
+    typecheck:
+      (scripts.typecheck && run('typecheck')) ??
+      (scripts['type-check'] && run('type-check')),
     lint: scripts.lint && run('lint'),
   },
   devPort: port,
