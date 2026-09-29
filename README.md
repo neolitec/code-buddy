@@ -77,15 +77,39 @@ Plugin skills are prefixed with the plugin name, hence `/code-buddy:code-buddy`.
 
 ## Development
 
+Load the plugin from your clone instead of the installed copy: start Claude
+Code in a frontend project with `--plugin-dir`, then run the skill as usual.
+
 ```sh
-cd skills/code-buddy/widget
-npm ci --ignore-scripts
-npm run build   # type-checks, then rebuilds dist/widget.js
+cd ~/dev/my-frontend-app
+claude --plugin-dir ~/dev/code-buddy
 ```
 
-`dist/widget.js` is committed so the skill works without a build step. Rebuild
-it after every change to `widget/src`. The build dependencies are pinned;
-review them before changing a version.
+If the plugin is also installed from the marketplace, disable it first
+(`claude plugin disable code-buddy@code-buddy`) so the skill is not loaded
+twice.
+
+What to do after a change:
+
+| You changed | To see it |
+|---|---|
+| `SKILL.md` (instructions, hooks) | `/reload-plugins` in the session, or a new session |
+| `scripts/*.mjs` except the server | Nothing: each call runs the script again |
+| `scripts/server.mjs`, `scripts/lib/*` | Restart the server: run `/code-buddy:code-buddy` again |
+| `widget/src/*` | Rebuild the widget, then reload the app page |
+
+The server reads `dist/widget.js` on every page load, so a rebuild and a page
+reload are enough for the widget:
+
+```sh
+cd skills/code-buddy/widget
+npm ci --ignore-scripts   # once
+npm run build             # type-checks, then rebuilds dist/widget.js
+```
+
+`dist/widget.js` is committed so the plugin works without a build step. Rebuild
+it after every change to `widget/src`, before you commit. The build
+dependencies are pinned; review them before changing a version.
 
 Paths below are relative to `skills/code-buddy/`.
 
@@ -98,5 +122,5 @@ Paths below are relative to `skills/code-buddy/`.
 | `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
 | `widget/src` | The widget (React, TypeScript) |
 
-`.claude-plugin/` holds the plugin and marketplace manifests. To try local
-changes, run `claude --plugin-dir .` from the repository root.
+`.claude-plugin/` holds the plugin and marketplace manifests. Run
+`claude plugin validate .` from the repository root after editing them.
