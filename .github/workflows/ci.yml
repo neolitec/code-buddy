@@ -57,15 +57,6 @@ jobs:
       - name: Build the widget
         run: npm run build
 
-      - name: Check the committed widget matches its sources
-        run: |
-          # status, not diff: a generated file missing from the commit counts too.
-          if [ -n "$(git status --porcelain -- skills/code-buddy/widget/dist)" ]; then
-            git status --short -- skills/code-buddy/widget/dist
-            echo "::error::widget/dist is out of date: run 'npm run build' and commit it."
-            exit 1
-          fi
-
   plugin:
     name: Validate plugin
     runs-on: ubuntu-24.04

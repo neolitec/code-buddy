@@ -42,7 +42,7 @@ To try your changes in a real app, load the plugin from your clone; see
 | `skills/code-buddy/SKILL.md`          | The skill Claude reads: modes, agent prompts, hooks                 |
 | `skills/code-buddy/scripts/`          | Node.js scripts (ES modules, JSDoc types), run by the skill         |
 | `skills/code-buddy/widget/src/`       | The browser widget (React, TypeScript)                              |
-| `skills/code-buddy/widget/dist/`      | The built widget, committed so the plugin works without a build     |
+| `skills/code-buddy/widget/dist/`      | The built widget: `npm run build`; never committed on `main`        |
 
 ## Checks
 
@@ -64,10 +64,9 @@ It runs, in order:
 
 Rules that go with them:
 
-- **Widget changes ship with their build.** When you change anything under
-  `widget/` (sources, build config, dependencies), run `npm run build` and
-  commit `widget/dist/` with the change. CI rebuilds it and fails if the
-  committed files differ. Never edit `dist/` by hand.
+- **The built widget is not committed.** `widget/dist/` is git-ignored on
+  `main`: build it locally to try your changes, and let the Release workflow
+  publish it on the `stable` branch.
 - **Scripts are plain JavaScript with JSDoc types**, type-checked by TypeScript.
   Add types where the checker needs them rather than silencing it.
 - **Lint exceptions are rare and explained.** Disable a rule for one line only,
@@ -108,28 +107,28 @@ widget bundles React. Adding one is a design decision; ask in an issue first.
 Maintainers release; contributors only add their change under `## Unreleased`
 in [`CHANGELOG.md`](CHANGELOG.md).
 
-Users receive a change only when `version` in
-[`.claude-plugin/plugin.json`](.claude-plugin/plugin.json) changes, so merging
-to `main` alone ships nothing. To release:
+Users install from the `stable` branch, which only the Release workflow
+updates: merging to `main` ships nothing. To release:
 
 1. Open a `chore: release x.y.z` pull request that sets `version`
    ([semver](https://semver.org): patch for fixes, minor for features, major
-   for breaking changes to commands or `.code-buddy.json`), moves the
-   `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading, and commits
-   the rebuilt `widget/dist/` (`npm run build`): the widget shows the
-   version, so CI fails until it is rebuilt.
+   for breaking changes to commands or `.code-buddy.json`) and moves the
+   `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading.
 2. Once it is merged, run **Actions → Release → Run workflow** on `main`, with
    the version. Nothing is tagged or published otherwise: merging to `main`
    never releases.
-3. The **Verify** job re-runs every CI check on that commit, then checks what a
+3. The **Verify** job re-runs every CI check on that commit and builds the
+   widget, then checks what a
    release needs: the version matches `plugin.json` and is greater than the
    last release, its tag is new, its changelog section is dated and filled
    with `Unreleased` empty, no dependency has a known vulnerability, and no
    code scanning alert is open.
-4. The **Tag and publish** job waits for a maintainer's approval in the
-   `release` environment, then tags the verified commit `vx.y.z` and publishes
-   the GitHub release: the changelog section as notes, and the plugin archive
-   with a signed provenance attestation. Releases are immutable: once
+4. The **Publish to stable** job waits for a maintainer's approval in the
+   `release` environment. It then commits the verified tree with its built
+   widget on `stable` (its parents: the previous release and the verified
+   commit on `main`), tags that commit `vx.y.z`, and publishes the GitHub
+   release: the changelog section as notes, and the plugin archive with a
+   signed provenance attestation. Releases are immutable: once
    published, neither the tag nor the files can change.
 
 ## Using Claude Code on this repository

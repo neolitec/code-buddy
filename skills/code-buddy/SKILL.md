@@ -74,7 +74,9 @@ given) resumes it and nothing is lost.
    ```
 
    It first prints `READY <url>`. On `PORT_BUSY`, report who holds the port
-   and stop: another session may already be watching this project.
+   and stop: another session may already be watching this project. On
+   `WIDGET_MISSING`, Code Buddy runs from a clone: give the user the command
+   it prints, and stop.
 2. Tell the user to open or reload `devUrl` from `.code-buddy.json`.
 3. React to each line:
 

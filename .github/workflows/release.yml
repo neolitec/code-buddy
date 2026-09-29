@@ -62,15 +62,6 @@ jobs:
       - name: Format, lint, type-check and build
         run: npm run check
 
-      - name: Check the committed widget matches its sources
-        run: |
-          # status, not diff: a generated file missing from the commit counts too.
-          if [ -n "$(git status --porcelain -- skills/code-buddy/widget/dist)" ]; then
-            git status --short -- skills/code-buddy/widget/dist
-            echo "::error::widget/dist is out of date: run 'npm run build' and commit it."
-            exit 1
-          fi
-
       - name: No open code scanning alert
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,29 +82,28 @@ jobs:
       - name: Validate the plugin and marketplace manifests
         run: '"$RUNNER_TEMP/claude/node_modules/.bin/claude" plugin validate .'
 
-      - name: Package the plugin
+      - name: Stage the built widget and the release notes
         run: |
-          git archive --format=tar.gz --prefix="code-buddy-$VERSION/" \
-            -o "$RUNNER_TEMP/code-buddy-$VERSION.tar.gz" HEAD
+          mkdir -p "$RUNNER_TEMP/release"
+          cp "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP/release/notes.md"
+          cp -R skills/code-buddy/widget/dist "$RUNNER_TEMP/release/dist"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release
-          path: |
-            ${{ runner.temp }}/notes.md
-            ${{ runner.temp }}/code-buddy-${{ inputs.version }}.tar.gz
+          path: ${{ runner.temp }}/release
           retention-days: 7
           if-no-files-found: error
 
   release:
-    name: Tag and publish
+    name: Publish to stable
     needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     # Waits for a maintainer's approval in the "release" environment.
     environment: release
     permissions:
-      contents: write # create the tag and the GitHub release
+      contents: write # push the stable branch, create the tag and the GitHub release
       id-token: write # sign the provenance attestation
       attestations: write # store the provenance attestation
     env:
@@ -133,19 +123,55 @@ jobs:
             tuf-repo-cdn.sigstore.dev:443
             uploads.github.com:443
 
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release
-          path: release
+          path: ${{ runner.temp }}/release
+
+      # stable = the verified commit plus its built widget. Its parents are the previous
+      # stable commit (so the push fast-forwards) and the verified commit on main.
+      - name: Build the stable commit and the plugin archive
+        id: stable
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          rm -rf skills/code-buddy/widget/dist
+          cp -R "$RUNNER_TEMP/release/dist" skills/code-buddy/widget/dist
+          git add --force skills/code-buddy/widget/dist
+          parents=(-p "$SHA")
+          if git ls-remote --exit-code --heads origin stable > /dev/null; then
+            git fetch --quiet origin stable
+            parents=(-p FETCH_HEAD "${parents[@]}")
+          fi
+          commit=$(git commit-tree "$(git write-tree)" "${parents[@]}" \
+            -m "release: v$VERSION" -m "Built from $SHA on main.")
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          git archive --format=tar.gz --prefix="code-buddy-$VERSION/" \
+            -o "$RUNNER_TEMP/code-buddy-$VERSION.tar.gz" "$commit"
 
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: release/code-buddy-${{ inputs.version }}.tar.gz
+          subject-path: ${{ runner.temp }}/code-buddy-${{ inputs.version }}.tar.gz
+
+      - name: Push stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.stable.outputs.commit }}
+        run: |
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "$COMMIT:refs/heads/stable"
 
       - name: Create the tag and the release
         env:
           GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.stable.outputs.commit }}
         run: |
-          gh release create "v$VERSION" "release/code-buddy-$VERSION.tar.gz" \
-            --repo "$GITHUB_REPOSITORY" --target "$SHA" \
-            --title "Code Buddy $VERSION" --notes-file release/notes.md
+          gh release create "v$VERSION" "$RUNNER_TEMP/code-buddy-$VERSION.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --target "$COMMIT" \
+            --title "Code Buddy $VERSION" --notes-file "$RUNNER_TEMP/release/notes.md"

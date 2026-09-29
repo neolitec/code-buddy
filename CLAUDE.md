@@ -12,7 +12,8 @@ browser, and one background agent per comment makes the change. See the
 - `skills/code-buddy/scripts/`: Node.js ES modules with JSDoc types, no
   dependencies.
 - `skills/code-buddy/widget/src/`: the widget (React, TypeScript), bundled into
-  the committed `widget/dist/widget.js`.
+  `widget/dist/`, which is git-ignored: the Release workflow publishes it on
+  the `stable` branch users install from.
 
 ## Commands
 
@@ -24,9 +25,8 @@ browser, and one background agent per comment makes the change. See the
 
 ## Rules
 
-- When a change touches `widget/` (sources, build config or dependencies), run
-  `npm run build` and commit `dist/` with it. Do not build for other
-  changes. Never edit `dist/` by hand.
+- Never commit `widget/dist/`. Build it (`npm run build`) only to try a widget
+  change locally.
 - Type the scripts with JSDoc instead of silencing the checker. Disable a lint
   rule only for one line, with `-- <reason>`.
 - No new dependency, runtime or dev, without an issue approving it.
