@@ -74,7 +74,9 @@ const workspaces =
 function workspaceApps() {
   if (!workspaces?.length) return []
   const apps = []
-  for (const pattern of [].concat(workspaces.packages ?? workspaces)) {
+  for (const pattern of /** @type {string[]} */ ([]).concat(
+    workspaces.packages ?? workspaces,
+  )) {
     const base = pattern.replace(/\/\*+$/, '')
     const dirs = pattern.endsWith('*')
       ? (() => {

@@ -47,7 +47,7 @@ export function ElementMarks({
 }: {
   root: Element
   comments: ReviewComment[]
-  activeId?: string
+  activeId?: string | undefined
 }) {
   const [marks, setMarks] = useState<Mark[]>([])
 

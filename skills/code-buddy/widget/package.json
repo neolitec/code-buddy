@@ -1,6 +1,7 @@
 {
   "name": "code-buddy-widget",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p .",
@@ -12,6 +13,6 @@
     "esbuild": "0.28.1",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }

@@ -148,5 +148,7 @@ try {
     }
   }
 } catch (error) {
-  process.stderr.write(`code-buddy hook: ${error.message}\n`)
+  process.stderr.write(
+    `code-buddy hook: ${error instanceof Error ? error.message : String(error)}\n`,
+  )
 }

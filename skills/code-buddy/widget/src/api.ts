@@ -7,12 +7,14 @@ const POLL_IDLE_MS = 10000
 const CHANGED = 'code-buddy:changed'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  })
+  // Headers, not an object spread: a spread drops the entries of a Headers or an array.
+  const headers = new Headers(init?.headers)
+  if (!headers.has('content-type')) headers.set('content-type', 'application/json')
+  const response = await fetch(url, { ...init, headers })
   if (!response.ok) throw new Error(`Request failed (${response.status})`)
-  return response.status === 204 ? (undefined as T) : response.json()
+  // The server is ours: its JSON has the shape the caller asks for.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
 }
 
 const changed = () => window.dispatchEvent(new Event(CHANGED))
@@ -37,13 +39,15 @@ function usePolledComments(url: string | undefined) {
   const hasOpen = comments.some((comment) => comment.status === 'open')
 
   useEffect(() => {
-    if (!url) return
-    load()
-    const timer = setInterval(load, hasOpen ? POLL_ACTIVE_MS : POLL_IDLE_MS)
-    window.addEventListener(CHANGED, load)
+    if (!url) return undefined
+    // load() never rejects: it records failures as `reachable: false`.
+    const reload = () => void load()
+    reload()
+    const timer = setInterval(reload, hasOpen ? POLL_ACTIVE_MS : POLL_IDLE_MS)
+    window.addEventListener(CHANGED, reload)
     return () => {
       clearInterval(timer)
-      window.removeEventListener(CHANGED, load)
+      window.removeEventListener(CHANGED, reload)
     }
   }, [url, load, hasOpen])
 

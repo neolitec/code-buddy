@@ -53,6 +53,22 @@ export function project(root) {
   }
 }
 
+/**
+ * The project root served on `port` by a code-buddy server. Rejects when nothing
+ * answers there; resolves to undefined when something else does.
+ * @param {number} port
+ * @returns {Promise<string | undefined>}
+ */
+export async function servedProject(port) {
+  const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+  return typeof health === 'object' &&
+    health !== null &&
+    'project' in health &&
+    typeof health.project === 'string'
+    ? health.project
+    : undefined
+}
+
 /** Removes `--project <dir>` so the remaining arguments are positional. */
 export function positional(argv = process.argv.slice(2)) {
   const flag = argv.indexOf('--project')

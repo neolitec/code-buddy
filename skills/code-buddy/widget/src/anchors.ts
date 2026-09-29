@@ -21,6 +21,8 @@ function indexText(root: Element): TextIndex {
   const nodes: TextIndex['nodes'] = []
   let raw = ''
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    // The walker only shows text nodes (NodeFilter.SHOW_TEXT).
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     nodes.push({ node: node as Text, start: raw.length })
     raw += node.textContent ?? ''
   }
@@ -29,7 +31,8 @@ function indexText(root: Element): TextIndex {
   const rawOffsets: number[] = []
   let pendingSpace = false
   for (let i = 0; i < raw.length; i++) {
-    if (/\s/.test(raw[i])) {
+    const char = raw.charAt(i)
+    if (/\s/.test(char)) {
       pendingSpace = text.length > 0
       continue
     }
@@ -38,7 +41,7 @@ function indexText(root: Element): TextIndex {
       rawOffsets.push(i)
       pendingSpace = false
     }
-    text += raw[i]
+    text += char
     rawOffsets.push(i)
   }
   return { nodes, text, rawOffsets }
@@ -46,6 +49,7 @@ function indexText(root: Element): TextIndex {
 
 function locate(index: TextIndex, rawOffset: number): [Text, number] {
   let match = index.nodes[0]
+  if (!match) throw new Error('code-buddy: the page has no text to anchor to')
   for (const entry of index.nodes) {
     if (entry.start > rawOffset) break
     match = entry
@@ -53,10 +57,17 @@ function locate(index: TextIndex, rawOffset: number): [Text, number] {
   return [match.node, rawOffset - match.start]
 }
 
+function rawOffsetAt(index: TextIndex, offset: number): number {
+  const raw = index.rawOffsets[offset]
+  if (raw === undefined)
+    throw new RangeError(`code-buddy: offset ${offset} is outside the page text`)
+  return raw
+}
+
 function rangeOf(index: TextIndex, start: number, end: number): Range {
   const range = document.createRange()
-  const [startNode, startOffset] = locate(index, index.rawOffsets[start])
-  const [endNode, endOffset] = locate(index, index.rawOffsets[end - 1])
+  const [startNode, startOffset] = locate(index, rawOffsetAt(index, start))
+  const [endNode, endOffset] = locate(index, rawOffsetAt(index, end - 1))
   range.setStart(startNode, startOffset)
   range.setEnd(endNode, endOffset + 1)
   return range
@@ -145,8 +156,9 @@ function step(element: Element): string {
 function selectorFor(root: Element, element: Element): string {
   const steps: string[] = []
   for (let node: Element | null = element; node && node !== root;) {
-    steps.unshift(step(node))
-    if (steps[0].startsWith('[') || steps[0].startsWith('#')) break
+    const current = step(node)
+    steps.unshift(current)
+    if (current.startsWith('[') || current.startsWith('#')) break
     node = node.parentElement
   }
   return steps.join(' > ')

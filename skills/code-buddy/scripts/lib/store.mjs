@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { errorCode } from './errors.mjs'
 
 export const APP_ROUTE = '*'
 const PROGRESS_SHOWN = 6
@@ -29,8 +30,15 @@ export const normaliseQuote = (text) => text.replace(/\s+/g, ' ').trim()
 export function createStore(project) {
   const file = project.commentsFile
   const progressFile = (id) => path.join(project.progressDir, `${id}.jsonl`)
+  /** @type {Promise<unknown>} */
   let queue = Promise.resolve()
 
+  /**
+   * Runs `task` after the previous one, so reads and writes never interleave.
+   * @template T
+   * @param {() => Promise<T>} task
+   * @returns {Promise<T>}
+   */
   const serialise = (task) => {
     const next = queue.then(task, task)
     queue = next.catch(() => undefined)
@@ -41,7 +49,7 @@ export function createStore(project) {
     try {
       return JSON.parse(await readFile(file, 'utf8'))
     } catch (error) {
-      if (error.code === 'ENOENT') return []
+      if (errorCode(error) === 'ENOENT') return []
       throw error
     }
   }
