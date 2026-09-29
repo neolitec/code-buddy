@@ -114,8 +114,19 @@ to `main` alone ships nothing. To release:
    ([semver](https://semver.org): patch for fixes, minor for features, major
    for breaking changes to commands or `.code-buddy.json`) and moves the
    `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading.
-2. After it is merged, tag the merge commit `vx.y.z` and publish a GitHub
-   release with the changelog section as notes.
+2. Once it is merged, run **Actions → Release → Run workflow** on `main`, with
+   the version. Nothing is tagged or published otherwise: merging to `main`
+   never releases.
+3. The **Verify** job re-runs every CI check on that commit, then checks what a
+   release needs: the version matches `plugin.json` and is greater than the
+   last release, its tag is new, its changelog section is dated and filled
+   with `Unreleased` empty, no dependency has a known vulnerability, and no
+   code scanning alert is open.
+4. The **Tag and publish** job waits for a maintainer's approval in the
+   `release` environment, then tags the verified commit `vx.y.z` and publishes
+   the GitHub release: the changelog section as notes, and the plugin archive
+   with a signed provenance attestation. Releases are immutable: once
+   published, neither the tag nor the files can change.
 
 ## Using Claude Code on this repository
 

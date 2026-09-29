@@ -1,0 +1,4 @@
+{
+  "extends": "../../skills/code-buddy/scripts/tsconfig.json",
+  "include": ["**/*.mjs"]
+}

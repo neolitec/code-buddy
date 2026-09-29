@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspace skills/code-buddy/widget",
-    "typecheck": "tsc -p skills/code-buddy/scripts && tsc -p skills/code-buddy/widget",
+    "typecheck": "tsc -p skills/code-buddy/scripts && tsc -p .github/scripts && tsc -p skills/code-buddy/widget",
     "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
