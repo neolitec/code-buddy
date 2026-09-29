@@ -5,8 +5,9 @@ description:
   The user comments directly on the dev app in the browser (select text, point
   at an element, or write about the page or the whole app); one background
   agent per comment makes the change and answers in the same thread.
-  "/code-buddy:code-buddy" starts the session (the widget only exists while
-  it runs); "/code-buddy:code-buddy init" installs it in the current project, "update" and
+  "/code-buddy:code-buddy [dir]" starts the session (the widget only exists
+  while it runs); "/code-buddy:code-buddy init [dir]" installs it in the
+  current project or in its folder `dir` (e.g. `web`), "update" and
   "uninstall" maintain it. Use when the user wants to give feedback on the app
   in the browser, to follow or answer that feedback, to install or remove the
   feedback widget, or says "/code-buddy" or "/code-buddy:code-buddy".
@@ -34,18 +35,24 @@ hooks:
 
 - **SKILL** is this skill's base directory (printed above as "Base directory for
   this skill"). Every script below is `node SKILL/scripts/<name>.mjs`.
-- **PROJECT** is the project root: the nearest ancestor of the working directory
-  that holds `.code-buddy.json`. A git worktree does not have it when the
-  file is untracked; then use the main checkout (`git worktree list`), and ask
-  if that is ambiguous. Always pass `--project PROJECT` to the scripts.
+- **PROJECT** is the project root. When the arguments name a directory (see
+  below), PROJECT is that directory, resolved from the working directory, else
+  from the git toplevel (so `web` works from anywhere in the repository);
+  stop and say so if neither exists. Otherwise PROJECT is the nearest ancestor
+  of the working directory that holds `.code-buddy.json`. A git worktree does
+  not have it when the file is untracked; then use the main checkout (`git
+  worktree list`), and ask if that is ambiguous. Always pass `--project PROJECT` to the scripts.
 
 A project installed under this skill's former name has `.live-feedback.json`
 instead: run `node SKILL/scripts/migrate.mjs --project PROJECT` before anything
 else. It refuses while a `/live-feedback` session still serves the project;
 then ask the user to close that session and run it again.
 
-Pick the mode from the arguments: `init`, `update`, `uninstall`, or none for the
-watch. With no argument and no `.code-buddy.json`, offer `init` first.
+Read the arguments as `[mode] [dir]`, in any order: the mode is `init`,
+`update` or `uninstall`, or none for the watch; any other argument is the
+directory (`/code-buddy:code-buddy web`, `/code-buddy:code-buddy init web`).
+Without a mode and no `.code-buddy.json` in PROJECT (or above it when no
+directory was given), offer `init` first, for that directory if one was named.
 
 Everything lives in the skill: the widget is served by the skill's local server
 and its code never enters the project. A project only holds a dev-only loader
@@ -56,7 +63,8 @@ snippet, `.code-buddy.json`, and (usually git-ignored) the comments file.
 This session only dispatches; one background subagent per comment does the
 work. The server runs only while this session watches: closing the session
 stops it, and the widget disappears on the next page load. Tell the user, in
-one line, that `/code-buddy:code-buddy` resumes it and nothing is lost.
+one line, that `/code-buddy:code-buddy` (with the same directory, if one was
+given) resumes it and nothing is lost.
 
 1. Start the server through the Monitor tool with the maximum timeout, and
    re-arm it whenever it expires (state lives in files, restarting is safe):
@@ -127,8 +135,9 @@ when the user answers, SendMessage the answer to the same subagent.
 
 ## Init: install in a project
 
-1. Run `node SKILL/scripts/detect.mjs --project <candidate>` on the git
-   toplevel of the working directory. It reads files only.
+1. Run `node SKILL/scripts/detect.mjs --project <candidate>` on the directory
+   named in the arguments, else on the git toplevel of the working directory.
+   It reads files only.
 2. Stop, and say why, when `isPackage` is false or `webFrontend` is false: the
    widget needs a web app served in a browser by a dev server. The framework
    does not matter otherwise (the widget carries its own React inside a shadow
@@ -190,7 +199,9 @@ when the user answers, SendMessage the answer to the same subagent.
    `node SKILL/scripts/verify-prod.mjs --project PROJECT`. On `FAIL`, fix the
    guard before finishing. If the build fails for unrelated reasons, say so
    and leave the check to the user.
-9. List the files changed and tell the user to run `/code-buddy:code-buddy`.
+9. List the files changed and tell the user to run `/code-buddy:code-buddy`,
+   followed by PROJECT relative to the git toplevel when it is not the
+   toplevel itself (e.g. `/code-buddy:code-buddy web`).
 
 ## Update
 

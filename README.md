@@ -52,6 +52,11 @@ Then, in your frontend project:
 
 Plugin skills are prefixed with the plugin name, hence `/code-buddy:code-buddy`.
 
+When the frontend lives in a folder of the repository, name it after the
+command: `/code-buddy:code-buddy init web` installs Code Buddy in `web/`, and
+`/code-buddy:code-buddy web` starts a session there. The folder is resolved
+from the current directory, else from the repository root.
+
 ## In the widget
 
 - **Comment** opens a new comment for the page, or the whole app.
