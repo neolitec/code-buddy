@@ -14,14 +14,17 @@ Error generating stack: `+a.message+`
   inset: 0;
   pointer-events: none;
   z-index: 2147483000;
-  --cb-accent: #1b64f2;
-  --cb-accent-strong: #1450c8;
-  --cb-accent-weak: #eaf1ff;
+  /* Blues of the mascot's body: accent and accent-strong are pixels of it, the
+     tints its median hue. Accent text keeps 4.5:1 on white and on accent-weak. */
+  --cb-accent: #216ec0;
+  --cb-accent-strong: #1759ad;
+  --cb-accent-weak: #e9f3fc;
+  --cb-accent-rgb: 33, 110, 192;
   --cb-text: #13294b;
   --cb-muted: #6b7a90;
-  --cb-border: #d9e2f1;
+  --cb-border: #d6e4f0;
   --cb-surface: #ffffff;
-  --cb-surface-2: #f4f7fd;
+  --cb-surface-2: #f5f9fc;
   --cb-green: #177a4c;
   --cb-green-bg: #e6f6ee;
   --cb-red: #d23f3f;
@@ -48,7 +51,7 @@ code { font-family: var(--cb-mono); }
   transition: background .15s, border-color .15s, color .15s;
 }
 .cb-btn:hover { background: var(--cb-accent-strong); }
-.cb-btn:disabled { cursor: default; background: var(--cb-accent-weak); color: #9db5e6; }
+.cb-btn:disabled { cursor: default; background: var(--cb-accent-weak); color: #9cbfde; }
 .cb-btn--secondary { background: var(--cb-surface); color: var(--cb-accent); border-color: var(--cb-border); }
 .cb-btn--secondary:hover { background: var(--cb-surface-2); border-color: var(--cb-accent); }
 .cb-btn--tertiary { background: transparent; color: var(--cb-accent); }
@@ -69,7 +72,7 @@ code { font-family: var(--cb-mono); }
 
 .cb-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .cb-chip--open { background: var(--cb-accent-weak); color: var(--cb-accent); }
-.cb-chip--claimed { background: #e3f0ff; color: #1767c7; }
+.cb-chip--claimed { background: #dcebf8; color: var(--cb-accent-strong); }
 .cb-chip--resolved { background: var(--cb-green-bg); color: var(--cb-green); }
 
 .cb-textarea {
@@ -78,7 +81,7 @@ code { font-family: var(--cb-mono); }
   background: var(--cb-surface-2); outline: none;
 }
 .cb-textarea:focus { border-color: var(--cb-accent); }
-.cb-textarea::placeholder { color: #7f9cd6; font-style: italic; }
+.cb-textarea::placeholder { color: #6498c4; font-style: italic; }
 
 .cb-checkbox { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--cb-accent); }
 .cb-checkbox input { width: 16px; height: 16px; margin: 0; accent-color: var(--cb-accent); }
@@ -176,8 +179,8 @@ code { font-family: var(--cb-mono); }
 .cb-mark { position: fixed; pointer-events: none; border: 2px solid var(--cb-yellow); border-radius: 4px; background: rgba(255, 196, 0, .1); }
 .cb-mark--active { border-color: var(--cb-red); background: rgba(255, 140, 0, .12); }
 .cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-yellow-dark); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(0, 120, 255, .12); box-shadow: 0 0 0 4px rgba(0, 120, 255, .18); }
-.cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(0, 120, 255, .08); }
+.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
+.cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
 .cb-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--cb-radius); background: var(--cb-text); color: #fff; font-size: 13px; pointer-events: none; }
 

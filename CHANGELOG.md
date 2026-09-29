@@ -15,6 +15,10 @@ release bumps `version` in `.claude-plugin/plugin.json`.
 - The panel's bottom-right corner shows the plugin's version and links to the
   project on GitHub.
 
+### Changed
+
+- The widget's blues come from the mascot's body, keeping readable contrast.
+
 ### Fixed
 
 - Leaving a new comment or a thread on a page without comments showed an
