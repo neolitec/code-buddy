@@ -455,7 +455,7 @@ export default function App({ root }: { root: Element }) {
           </div>
         ) : (
           <div className="cb-idle" data-testid="cb-unwatched">
-            No Claude session is watching. Run /code-buddy.
+            No Claude session is watching. Run /code-buddy:code-buddy.
           </div>
         ))}
       {isActive(comment) && !!comment.progress?.length && (
