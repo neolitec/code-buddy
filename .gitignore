@@ -3,6 +3,10 @@ node_modules/
 *.log
 .DS_Store
 
+# The built widget: `npm run build` locally, and the Release workflow for the
+# stable branch users install from.
+skills/code-buddy/widget/dist/
+
 # Local state of a project using Code Buddy, and browser test output.
 .code-buddy/
 .playwright-mcp/

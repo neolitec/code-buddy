@@ -16,6 +16,5 @@ Closes #
 ## Checklist
 
 - [ ] `npm run check` passes.
-- [ ] If `widget/` changed: `npm run build` was run and `widget/dist/` is committed.
 - [ ] If behavior changed: `README.md`, `SKILL.md` and `CHANGELOG.md` are updated.
 - [ ] No new dependency, or one approved in the linked issue.

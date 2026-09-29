@@ -4,6 +4,7 @@
 // per comment needing attention (the manager reads them through Monitor):
 // OPEN (backlog at start), NEW, FOLLOWUP, EDIT, RESOLVED, CANCELLED, DELETED.
 // Only runs while /code-buddy is active: no server, no widget.
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
@@ -21,6 +22,12 @@ const port = Number(process.env.CODE_BUDDY_PORT ?? config.port ?? 4599)
 const pollMs = Number(process.env.CODE_BUDDY_POLL_MS ?? 1000)
 const store = createStore(project)
 const WIDGET = path.join(SKILL_DIR, 'widget', 'dist', 'widget.js')
+// Releases ship the built widget; a clone of the repository builds it first.
+if (!existsSync(WIDGET)) {
+  const root = path.resolve(SKILL_DIR, '..', '..')
+  console.log(`WIDGET_MISSING run \`npm ci && npm run build\` in ${root}`)
+  process.exit(2)
+}
 
 const LOCAL_ORIGIN =
   /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[\w-]+\.localhost)(:\d+)?$/

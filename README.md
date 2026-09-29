@@ -55,14 +55,16 @@ to stop it.
 Install it as a Claude Code plugin, straight from GitHub (no clone needed):
 
 ```sh
-claude plugin marketplace add neolitec/code-buddy
+claude plugin marketplace add neolitec/code-buddy#stable
 claude plugin install code-buddy@code-buddy
 ```
 
-Or, inside a session: `/plugin marketplace add neolitec/code-buddy`, then
-`/plugin install code-buddy@code-buddy`. Get new versions with
-`claude plugin marketplace update code-buddy`, or turn on auto-update for the
-marketplace in `/plugin`; the [changelog](CHANGELOG.md) lists what each brings.
+Or, inside a session: `/plugin marketplace add neolitec/code-buddy#stable`,
+then `/plugin install code-buddy@code-buddy`. The `stable` branch holds the
+released versions; `main` is where development happens and does not work
+without a build. Get new versions with `claude plugin marketplace update
+code-buddy`, or turn on auto-update for the marketplace in `/plugin`; the
+[changelog](CHANGELOG.md) lists what each brings.
 
 Requires Claude Code and Node.js 22 or later.
 
@@ -109,10 +111,12 @@ To report a vulnerability, see the [security policy](SECURITY.md).
 
 ## Development
 
-Load the plugin from your clone instead of the installed copy: start Claude
-Code in a frontend project with `--plugin-dir`, then run the skill as usual.
+Load the plugin from your clone instead of the installed copy. Build the
+widget once, then start Claude Code in a frontend project with `--plugin-dir`
+and run the skill as usual.
 
 ```sh
+cd ~/dev/code-buddy && npm ci && npm run build
 cd ~/dev/my-frontend-app
 claude --plugin-dir ~/dev/code-buddy
 ```
@@ -139,11 +143,10 @@ npm run build   # type-checks, then rebuilds dist/widget.js
 npm run check   # everything CI checks: format, lint, types, build
 ```
 
-`dist/widget.js` is committed so the plugin works without a build step, with
-`dist/THIRD_PARTY_LICENSES.txt`, the licenses of the packages it bundles. Rebuild
-it after every change to `widget/`, and commit it with the change; CI fails
-when it does not match its sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-the rest of the rules.
+`dist/` (`widget.js` and `THIRD_PARTY_LICENSES.txt`, the licenses of the
+packages it bundles) is never committed on `main`: the Release workflow builds
+it and publishes it on the `stable` branch. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for the rest of the rules.
 
 Paths below are relative to `skills/code-buddy/`.
 
