@@ -5,11 +5,11 @@ description:
   The user comments directly on the dev app in the browser (select text, point
   at an element, or write about the page or the whole app); one background
   agent per comment makes the change and answers in the same thread.
-  "/code-buddy" starts the session (the widget only exists while it runs);
-  "/code-buddy init" installs it in the current project, "update" and
+  "/code-buddy:code-buddy" starts the session (the widget only exists while
+  it runs); "/code-buddy:code-buddy init" installs it in the current project, "update" and
   "uninstall" maintain it. Use when the user wants to give feedback on the app
   in the browser, to follow or answer that feedback, to install or remove the
-  feedback widget, or says "/code-buddy".
+  feedback widget, or says "/code-buddy" or "/code-buddy:code-buddy".
 hooks:
   PreToolUse:
     - matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash'
@@ -56,7 +56,7 @@ snippet, `.code-buddy.json`, and (usually git-ignored) the comments file.
 This session only dispatches; one background subagent per comment does the
 work. The server runs only while this session watches: closing the session
 stops it, and the widget disappears on the next page load. Tell the user, in
-one line, that `/code-buddy` resumes it and nothing is lost.
+one line, that `/code-buddy:code-buddy` resumes it and nothing is lost.
 
 1. Start the server through the Monitor tool with the maximum timeout, and
    re-arm it whenever it expires (state lives in files, restarting is safe):
@@ -190,7 +190,7 @@ when the user answers, SendMessage the answer to the same subagent.
    `node SKILL/scripts/verify-prod.mjs --project PROJECT`. On `FAIL`, fix the
    guard before finishing. If the build fails for unrelated reasons, say so
    and leave the check to the user.
-9. List the files changed and tell the user to run `/code-buddy`.
+9. List the files changed and tell the user to run `/code-buddy:code-buddy`.
 
 ## Update
 

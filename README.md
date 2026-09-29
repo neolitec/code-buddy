@@ -28,20 +28,29 @@ to stop it.
 
 ## Install
 
+Install it as a Claude Code plugin, straight from GitHub (no clone needed):
+
 ```sh
-git clone https://github.com/neolitec/code-buddy ~/.claude/skills/code-buddy
+claude plugin marketplace add neolitec/code-buddy
+claude plugin install code-buddy@code-buddy
 ```
+
+Or, inside a session: `/plugin marketplace add neolitec/code-buddy`, then
+`/plugin install code-buddy@code-buddy`. Get updates with
+`claude plugin marketplace update code-buddy`.
 
 Requires Claude Code and Node.js 20 or later.
 
 Then, in your frontend project:
 
 ```
-/code-buddy init    install in this project (asks only what it cannot detect)
-/code-buddy         start a session; open your dev app and comment
-/code-buddy update  migrate an older install
-/code-buddy uninstall
+/code-buddy:code-buddy init    install in this project (asks only what it cannot detect)
+/code-buddy:code-buddy         start a session; open your dev app and comment
+/code-buddy:code-buddy update  migrate an older install
+/code-buddy:code-buddy uninstall
 ```
+
+Plugin skills are prefixed with the plugin name, hence `/code-buddy:code-buddy`.
 
 ## In the widget
 
@@ -69,7 +78,7 @@ Then, in your frontend project:
 ## Development
 
 ```sh
-cd widget
+cd skills/code-buddy/widget
 npm ci --ignore-scripts
 npm run build   # type-checks, then rebuilds dist/widget.js
 ```
@@ -77,6 +86,8 @@ npm run build   # type-checks, then rebuilds dist/widget.js
 `dist/widget.js` is committed so the skill works without a build step. Rebuild
 it after every change to `widget/src`. The build dependencies are pinned;
 review them before changing a version.
+
+Paths below are relative to `skills/code-buddy/`.
 
 | Path | What |
 |---|---|
@@ -86,3 +97,6 @@ review them before changing a version.
 | `scripts/claim.mjs`, `resolve.mjs`, `lock.mjs` | Used by the agents |
 | `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
 | `widget/src` | The widget (React, TypeScript) |
+
+`.claude-plugin/` holds the plugin and marketplace manifests. To try local
+changes, run `claude --plugin-dir .` from the repository root.

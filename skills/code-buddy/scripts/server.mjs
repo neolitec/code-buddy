@@ -12,7 +12,7 @@ import { APP_ROUTE, createStore, isActive, normaliseQuote } from './lib/store.mj
 
 const project = findProject()
 if (!project) {
-  console.error('no .code-buddy.json found; run /code-buddy init first')
+  console.error('no .code-buddy.json found; run /code-buddy:code-buddy init first')
   process.exit(2)
 }
 const { config } = project
@@ -228,7 +228,7 @@ server.on('error', async (error) => {
     const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
     owner =
       health.project === project.root
-        ? 'another /code-buddy session for this project'
+        ? 'another /code-buddy:code-buddy session for this project'
         : `the code-buddy server of ${health.project}`
   } catch {}
   console.log(`PORT_BUSY ${port} is used by ${owner}`)
