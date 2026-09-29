@@ -1,6 +1,11 @@
 # Code Buddy
 
-A [Claude Code](https://claude.com/claude-code) skill that turns feedback on a
+[![CI](https://github.com/neolitec/code-buddy/actions/workflows/ci.yml/badge.svg)](https://github.com/neolitec/code-buddy/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml/badge.svg)](https://github.com/neolitec/code-buddy/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/neolitec/code-buddy/badge)](https://scorecard.dev/viewer/?uri=github.com/neolitec/code-buddy)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+A [Claude Code](https://claude.com/claude-code) plugin that turns feedback on a
 running frontend app into code changes.
 
 You comment directly on your dev app in the browser: select text, point at an
@@ -39,7 +44,7 @@ Or, inside a session: `/plugin marketplace add neolitec/code-buddy`, then
 `/plugin install code-buddy@code-buddy`. Get updates with
 `claude plugin marketplace update code-buddy`.
 
-Requires Claude Code and Node.js 20 or later.
+Requires Claude Code and Node.js 22 or later.
 
 Then, in your frontend project:
 
@@ -80,6 +85,8 @@ from the current directory, else from the repository root.
   production builds; `scripts/verify-prod.mjs` checks the build output.
 - Comments hold page text and HTML excerpts; they stay in your project folder.
 
+To report a vulnerability, see the [security policy](SECURITY.md).
+
 ## Development
 
 Load the plugin from your clone instead of the installed copy: start Claude
@@ -104,17 +111,18 @@ What to do after a change:
 | `widget/src/*` | Rebuild the widget, then reload the app page |
 
 The server reads `dist/widget.js` on every page load, so a rebuild and a page
-reload are enough for the widget:
+reload are enough for the widget. From the repository root:
 
 ```sh
-cd skills/code-buddy/widget
-npm ci --ignore-scripts   # once
-npm run build             # type-checks, then rebuilds dist/widget.js
+npm ci          # once; install scripts are disabled
+npm run build   # type-checks, then rebuilds dist/widget.js
+npm run check   # everything CI checks: format, lint, types, build
 ```
 
 `dist/widget.js` is committed so the plugin works without a build step. Rebuild
-it after every change to `widget/src`, before you commit. The build
-dependencies are pinned; review them before changing a version.
+it after every change to `widget/`, and commit it with the change; CI fails
+when it does not match its sources. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+the rest of the rules.
 
 Paths below are relative to `skills/code-buddy/`.
 
@@ -129,3 +137,12 @@ Paths below are relative to `skills/code-buddy/`.
 
 `.claude-plugin/` holds the plugin and marketplace manifests. Run
 `claude plugin validate .` from the repository root after editing them.
+
+## Contributing
+
+Contributions are welcome: read [CONTRIBUTING.md](CONTRIBUTING.md) first, and
+follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE) © Kevin Manson

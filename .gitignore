@@ -1,3 +1,8 @@
 node_modules/
 *.tmp
+*.log
 .DS_Store
+
+# Local state of a project using Code Buddy, and browser test output.
+.code-buddy/
+.playwright-mcp/
