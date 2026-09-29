@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            nodejs.org:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            registry.npmjs.org:443
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify dependency signatures
+        run: npm audit signatures
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build the widget
+        run: npm run build
+
+      - name: Check the committed widget matches its sources
+        run: |
+          if ! git diff --exit-code --stat -- skills/code-buddy/widget/dist; then
+            echo "::error::widget/dist/widget.js is out of date: run 'npm run build' and commit it."
+            exit 1
+          fi
+
+  plugin:
+    name: Validate plugin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      # Pinned; bump it by hand when a newer Claude Code changes the manifest format.
+      CLAUDE_CODE_VERSION: 2.1.284
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      # Outside the project, so it never enters its lockfile. Install scripts stay off;
+      # only Claude Code's own installer runs, to fetch its native binary.
+      - name: Install Claude Code
+        # Deliberately outside the lockfile: a 220 MB tool CI alone needs, pinned above.
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-audit --ignore-scripts \
+            "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          node "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/install.cjs"
+
+      - name: Validate the plugin and marketplace manifests
+        run: '"$RUNNER_TEMP/claude/node_modules/.bin/claude" plugin validate .'

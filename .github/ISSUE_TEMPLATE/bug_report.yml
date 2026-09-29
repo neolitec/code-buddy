@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in Code Buddy does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security issues go through the [security policy](https://github.com/neolitec/code-buddy/security/policy), never here.**
+  - type: checkboxes
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the existing issues and this one is new.
+          required: true
+        - label: I am on the latest version (`claude plugin marketplace update code-buddy`).
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. `/code-buddy:code-buddy init` in a Vite + React app
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: Hook errors, server output, browser console. Remove anything private first.
+      render: text
+  - type: input
+    id: claude-code
+    attributes:
+      label: Claude Code version
+      placeholder: claude --version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js version, browser, and the framework and bundler of your app.
+      placeholder: macOS 26, Node 24.3, Chrome 142, Next.js 16 (Turbopack)
+    validations:
+      required: true

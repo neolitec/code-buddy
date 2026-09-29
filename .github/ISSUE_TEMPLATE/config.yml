@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/neolitec/code-buddy/security/advisories/new
+    about: Privately, never in a public issue. See SECURITY.md.
+  - name: Ask a question
+    url: https://github.com/neolitec/code-buddy/discussions/categories/q-a
+    about: Questions about using Code Buddy go to Discussions.

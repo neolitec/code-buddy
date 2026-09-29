@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest a change to what Code Buddy does.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Code Buddy stays small on purpose. Describe the problem first: the best solution may not be a new feature.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you suggest
+      description: How Code Buddy could solve it, from the user's point of view.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds you use today, or other approaches you considered.
+  - type: checkboxes
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to implement it, once a maintainer agrees on the approach.
