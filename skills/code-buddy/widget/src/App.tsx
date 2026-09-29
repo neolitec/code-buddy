@@ -41,6 +41,8 @@ import {
 } from './ui'
 import buddy from './assets/buddy.webp'
 
+const REPOSITORY = 'https://github.com/neolitec/code-buddy'
+
 const PANEL_WIDTH = 380
 const MIN_PANEL_WIDTH = 320
 const MAX_PANEL_RATIO = 0.8
@@ -803,6 +805,12 @@ export default function App({ root }: { root: Element }) {
           <div className="cb-buddy-slot">
             <img className="cb-buddy" src={buddy} alt="" draggable={false} />
           </div>
+          <footer className="cb-footer">
+            v{CODE_BUDDY_VERSION} –{' '}
+            <a href={REPOSITORY} target="_blank" rel="noopener noreferrer">
+              Code Buddy
+            </a>
+          </footer>
         </section>
       )}
       <Toasts />

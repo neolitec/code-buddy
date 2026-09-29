@@ -12,6 +12,8 @@ release bumps `version` in `.claude-plugin/plugin.json`.
 - A mascot drifts at the bottom of the panel, in its own strip so it never
   covers the comments. It keeps still under `prefers-reduced-motion`, and is
   hidden when the window is under 560 px tall.
+- The panel's bottom-right corner shows the plugin's version and links to the
+  project on GitHub.
 
 ### Fixed
 

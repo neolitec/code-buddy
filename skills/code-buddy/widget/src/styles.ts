@@ -104,7 +104,15 @@ code { font-family: var(--cb-mono); }
 .cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; pointer-events: none; user-select: none; }
 .cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); animation: cb-float 4.8s ease-in-out infinite; }
 /* On a short screen the chat needs the room more than the mascot does. */
-@media (max-height: 560px) { .cb-buddy-slot { display: none; } }
+@media (max-height: 560px) {
+  .cb-buddy-slot { display: none; }
+  /* Without the strip, the footer sits over the body's end: keep it clear. */
+  .cb-body { padding-bottom: 36px; }
+}
+/* Version and project link, in the panel's bottom-right corner. */
+.cb-footer { position: absolute; right: 16px; bottom: 12px; font-size: 11px; color: var(--cb-muted); }
+.cb-footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.cb-footer a:hover { color: var(--cb-accent); }
 /* A slow drift, bob and tilt; translateX(-50%) is restated in every frame because the animation owns transform. */
 @keyframes cb-float {
   0%, 100% { transform: translateX(-50%) translateY(0) rotate(-3deg); }

@@ -112,8 +112,10 @@ to `main` alone ships nothing. To release:
 
 1. Open a `chore: release x.y.z` pull request that sets `version`
    ([semver](https://semver.org): patch for fixes, minor for features, major
-   for breaking changes to commands or `.code-buddy.json`) and moves the
-   `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading.
+   for breaking changes to commands or `.code-buddy.json`), moves the
+   `Unreleased` entries under a `## x.y.z - YYYY-MM-DD` heading, and commits
+   the rebuilt `widget/dist/widget.js` (`npm run build`): the widget shows the
+   version, so CI fails until it is rebuilt.
 2. Once it is merged, run **Actions → Release → Run workflow** on `main`, with
    the version. Nothing is tagged or published otherwise: merging to `main`
    never releases.
