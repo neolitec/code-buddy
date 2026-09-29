@@ -26,7 +26,7 @@ export async function appendProgress(project, comment, entry) {
   await mkdir(project.progressDir, { recursive: true })
   await appendFile(
     path.join(project.progressDir, `${comment}.jsonl`),
-    `${JSON.stringify(entry)}\n`
+    `${JSON.stringify(entry)}\n`,
   )
 }
 

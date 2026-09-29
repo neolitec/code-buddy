@@ -5,15 +5,13 @@ export const HIGHLIGHT_NAME = 'code-buddy'
 export const ACTIVE_HIGHLIGHT_NAME = 'code-buddy-active'
 
 function highlightsApi() {
-  return typeof CSS !== 'undefined' && 'highlights' in CSS
-    ? CSS.highlights
-    : undefined
+  return typeof CSS !== 'undefined' && 'highlights' in CSS ? CSS.highlights : undefined
 }
 
 export function paintHighlights(
   root: Element,
   comments: ReviewComment[],
-  activeId?: string
+  activeId?: string,
 ): void {
   const highlights = highlightsApi()
   if (!highlights) return
@@ -42,7 +40,7 @@ export function scrollToComment(root: Element, comment: ReviewComment): void {
     range?.startContainer.parentElement ??
     (comment.section
       ? Array.from(root.querySelectorAll('h1, h2, h3')).find(
-          (heading) => heading.textContent?.trim() === comment.section
+          (heading) => heading.textContent?.trim() === comment.section,
         )
       : undefined)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })

@@ -1,8 +1,4 @@
-import {
-  type ReviewAnchor,
-  type ReviewElement,
-  normaliseQuote,
-} from './domain'
+import { type ReviewAnchor, type ReviewElement, normaliseQuote } from './domain'
 
 const HEADINGS = 'h1, h2, h3'
 const WIDGET = '[data-code-buddy]'
@@ -25,6 +21,8 @@ function indexText(root: Element): TextIndex {
   const nodes: TextIndex['nodes'] = []
   let raw = ''
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    // The walker only shows text nodes (NodeFilter.SHOW_TEXT).
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     nodes.push({ node: node as Text, start: raw.length })
     raw += node.textContent ?? ''
   }
@@ -33,7 +31,8 @@ function indexText(root: Element): TextIndex {
   const rawOffsets: number[] = []
   let pendingSpace = false
   for (let i = 0; i < raw.length; i++) {
-    if (/\s/.test(raw[i])) {
+    const char = raw.charAt(i)
+    if (/\s/.test(char)) {
       pendingSpace = text.length > 0
       continue
     }
@@ -42,7 +41,7 @@ function indexText(root: Element): TextIndex {
       rawOffsets.push(i)
       pendingSpace = false
     }
-    text += raw[i]
+    text += char
     rawOffsets.push(i)
   }
   return { nodes, text, rawOffsets }
@@ -50,6 +49,7 @@ function indexText(root: Element): TextIndex {
 
 function locate(index: TextIndex, rawOffset: number): [Text, number] {
   let match = index.nodes[0]
+  if (!match) throw new Error('code-buddy: the page has no text to anchor to')
   for (const entry of index.nodes) {
     if (entry.start > rawOffset) break
     match = entry
@@ -57,10 +57,17 @@ function locate(index: TextIndex, rawOffset: number): [Text, number] {
   return [match.node, rawOffset - match.start]
 }
 
+function rawOffsetAt(index: TextIndex, offset: number): number {
+  const raw = index.rawOffsets[offset]
+  if (raw === undefined)
+    throw new RangeError(`code-buddy: offset ${offset} is outside the page text`)
+  return raw
+}
+
 function rangeOf(index: TextIndex, start: number, end: number): Range {
   const range = document.createRange()
-  const [startNode, startOffset] = locate(index, index.rawOffsets[start])
-  const [endNode, endOffset] = locate(index, index.rawOffsets[end - 1])
+  const [startNode, startOffset] = locate(index, rawOffsetAt(index, start))
+  const [endNode, endOffset] = locate(index, rawOffsetAt(index, end - 1))
   range.setStart(startNode, startOffset)
   range.setEnd(endNode, endOffset + 1)
   return range
@@ -68,11 +75,7 @@ function rangeOf(index: TextIndex, start: number, end: number): Range {
 
 function occurrencesOf(text: string, quote: string): number[] {
   const found: number[] = []
-  for (
-    let at = text.indexOf(quote);
-    at !== -1;
-    at = text.indexOf(quote, at + 1)
-  ) {
+  for (let at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) {
     found.push(at)
   }
   return found
@@ -83,8 +86,7 @@ function sectionOf(root: Element, range: Range): string {
   root.querySelectorAll(HEADINGS).forEach((heading) => {
     if (heading.closest(WIDGET)) return
     const before =
-      range.compareBoundaryPoints(Range.START_TO_START, rangeAround(heading)) >=
-      0
+      range.compareBoundaryPoints(Range.START_TO_START, rangeAround(heading)) >= 0
     if (before) section = heading.textContent?.trim() ?? section
   })
   return section
@@ -99,13 +101,12 @@ function rangeAround(element: Element): Range {
 /** Describes a user selection so it can be found again on a later render. */
 export function anchorFromSelection(
   root: Element,
-  selection: Selection
+  selection: Selection,
 ): ReviewAnchor | undefined {
   if (selection.rangeCount === 0 || selection.isCollapsed) return undefined
   const range = selection.getRangeAt(0)
   const container = range.commonAncestorContainer
-  const element =
-    container instanceof Element ? container : container.parentElement
+  const element = container instanceof Element ? container : container.parentElement
   if (!root.contains(container) || element?.closest(WIDGET)) {
     return undefined
   }
@@ -128,10 +129,7 @@ export function anchorFromSelection(
 }
 
 /** Finds the live Range for a stored anchor, if its quote is still on the page. */
-export function rangeFromAnchor(
-  root: Element,
-  anchor: ReviewAnchor
-): Range | undefined {
+export function rangeFromAnchor(root: Element, anchor: ReviewAnchor): Range | undefined {
   if (!anchor.quote) return undefined
   const index = indexText(root)
   const occurrences = occurrencesOf(index.text, anchor.quote)
@@ -148,7 +146,7 @@ function step(element: Element): string {
   const parent = element.parentElement
   if (!parent) return tag
   const siblings = Array.from(parent.children).filter(
-    (child) => child.tagName === element.tagName
+    (child) => child.tagName === element.tagName,
   )
   return siblings.length > 1
     ? `${tag}:nth-of-type(${siblings.indexOf(element) + 1})`
@@ -158,18 +156,16 @@ function step(element: Element): string {
 function selectorFor(root: Element, element: Element): string {
   const steps: string[] = []
   for (let node: Element | null = element; node && node !== root;) {
-    steps.unshift(step(node))
-    if (steps[0].startsWith('[') || steps[0].startsWith('#')) break
+    const current = step(node)
+    steps.unshift(current)
+    if (current.startsWith('[') || current.startsWith('#')) break
     node = node.parentElement
   }
   return steps.join(' > ')
 }
 
 /** Describes a pointed-at element so it can be found and understood later. */
-export function anchorFromElement(
-  root: Element,
-  element: Element
-): ReviewAnchor {
+export function anchorFromElement(root: Element, element: Element): ReviewAnchor {
   const anchor: ReviewElement = {
     selector: selectorFor(root, element),
     tag: element.tagName.toLowerCase(),
@@ -186,7 +182,7 @@ export function anchorFromElement(
 
 export function elementFromAnchor(
   root: Element,
-  anchor: ReviewAnchor
+  anchor: ReviewAnchor,
 ): Element | undefined {
   if (!anchor.element) return undefined
   try {

@@ -1,0 +1,149 @@
+name: Release
+
+# Manual only: Actions → Release → Run workflow, on main. See CONTRIBUTING.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, x.y.z; must match .claude-plugin/plugin.json
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: read # count the open code scanning alerts
+    env:
+      CLAUDE_CODE_VERSION: 2.1.284
+      VERSION: ${{ inputs.version }}
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the tags, to compare with the released versions
+
+      - name: Pin the commit to release
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check the version, tag and changelog
+        run: node .github/scripts/release-check.mjs "$VERSION" "$RUNNER_TEMP/notes.md"
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify dependency signatures
+        run: npm audit signatures
+
+      - name: No known vulnerability in dependencies
+        run: npm audit --audit-level=low
+
+      - name: Format, lint, type-check and build
+        run: npm run check
+
+      - name: Check the committed widget matches its sources
+        run: |
+          if ! git diff --exit-code --stat -- skills/code-buddy/widget/dist; then
+            echo "::error::widget/dist/widget.js is out of date: run 'npm run build' and commit it."
+            exit 1
+          fi
+
+      - name: No open code scanning alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh api "repos/$GITHUB_REPOSITORY/code-scanning/alerts?state=open&per_page=100" --jq length)
+          if [ "$open" != "0" ]; then
+            echo "::error::$open open code scanning alert(s): fix or dismiss them before releasing."
+            exit 1
+          fi
+
+      - name: Install Claude Code
+        # Deliberately outside the lockfile: a 220 MB tool CI alone needs, pinned above.
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --prefix "$RUNNER_TEMP/claude" --no-save --no-audit --ignore-scripts \
+            "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          node "$RUNNER_TEMP/claude/node_modules/@anthropic-ai/claude-code/install.cjs"
+
+      - name: Validate the plugin and marketplace manifests
+        run: '"$RUNNER_TEMP/claude/node_modules/.bin/claude" plugin validate .'
+
+      - name: Package the plugin
+        run: |
+          git archive --format=tar.gz --prefix="code-buddy-$VERSION/" \
+            -o "$RUNNER_TEMP/code-buddy-$VERSION.tar.gz" HEAD
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release
+          path: |
+            ${{ runner.temp }}/notes.md
+            ${{ runner.temp }}/code-buddy-${{ inputs.version }}.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: Tag and publish
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Waits for a maintainer's approval in the "release" environment.
+    environment: release
+    permissions:
+      contents: write # create the tag and the GitHub release
+      id-token: write # sign the provenance attestation
+      attestations: write # store the provenance attestation
+    env:
+      VERSION: ${{ inputs.version }}
+      SHA: ${{ needs.verify.outputs.sha }}
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            *.blob.core.windows.net:443
+            api.github.com:443
+            fulcio.sigstore.dev:443
+            github.com:443
+            rekor.sigstore.dev:443
+            results-receiver.actions.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
+            uploads.github.com:443
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release
+          path: release
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release/code-buddy-${{ inputs.version }}.tar.gz
+
+      - name: Create the tag and the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "release/code-buddy-$VERSION.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "Code Buddy $VERSION" --notes-file release/notes.md

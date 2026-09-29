@@ -222,6 +222,7 @@ deleting `.code-buddy/`: it holds the reader's comments.
   Automated checks point the server at another file with
   `CODE_BUDDY_COMMENTS_FILE`.
 - `node SKILL/scripts/lock.mjs status --project PROJECT` lists held locks.
-- The widget source is `SKILL/widget/src`; `npm run build` in `SKILL/widget`
-  rebuilds `dist/widget.js`. Its dependencies are pinned and were security
-  scanned; scan again before changing any version.
+- The widget source is `SKILL/widget/src`; `npm ci && npm run build` at the
+  repository root (two levels above SKILL) rebuilds `dist/widget.js`. Its
+  dependencies are pinned and were security scanned; scan again before
+  changing any version.

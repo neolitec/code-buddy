@@ -55,7 +55,10 @@ function describe(root, tool, input) {
     case 'Glob':
       return { kind: 'search', label: short(input.pattern ?? '') }
     case 'WebFetch':
-      return { kind: 'web', label: URL.canParse(input.url) ? new URL(input.url).host : 'web' }
+      return {
+        kind: 'web',
+        label: URL.canParse(input.url) ? new URL(input.url).host : 'web',
+      }
     case 'WebSearch':
       return { kind: 'web', label: short(input.query ?? '') }
     case 'Skill':
@@ -76,7 +79,7 @@ async function preToolUse(agent, tool, input) {
   const active = await locks.activeCommentIds()
   if (active && !active.has(binding.comment)) {
     process.stderr.write(
-      `Comment ${binding.comment} was cancelled, resolved or deleted by the reader. Stop now: make no further changes and reply "CANCELLED".\n`
+      `Comment ${binding.comment} was cancelled, resolved or deleted by the reader. Stop now: make no further changes and reply "CANCELLED".\n`,
     )
     process.exit(2)
   }
@@ -91,7 +94,7 @@ async function preToolUse(agent, tool, input) {
   process.stderr.write(
     `${result.target} is being changed by the agent of comment ${result.holder}. ` +
       `Your ${result.released.length} lock(s) were released to avoid a deadlock: ` +
-      're-read the files you are changing, then retry this step.\n'
+      're-read the files you are changing, then retry this step.\n',
   )
   process.exit(2)
 }
@@ -145,5 +148,7 @@ try {
     }
   }
 } catch (error) {
-  process.stderr.write(`code-buddy hook: ${error.message}\n`)
+  process.stderr.write(
+    `code-buddy hook: ${error instanceof Error ? error.message : String(error)}\n`,
+  )
 }

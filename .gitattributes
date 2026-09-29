@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Built from skills/code-buddy/widget/src; CI rebuilds it and fails if it differs.
+skills/code-buddy/widget/dist/** linguist-generated=true

@@ -1,8 +1,13 @@
 {
   "name": "code-buddy",
+  "version": "0.1.0",
   "description": "Comment on your dev app in the browser; one background agent per comment makes the change and answers in the thread",
   "author": {
-    "name": "Kevin Manson"
+    "name": "Kevin Manson",
+    "url": "https://github.com/neolitec"
   },
-  "repository": "https://github.com/neolitec/code-buddy"
+  "repository": "https://github.com/neolitec/code-buddy",
+  "homepage": "https://github.com/neolitec/code-buddy#readme",
+  "license": "MIT",
+  "keywords": ["feedback", "review", "frontend", "browser", "widget"]
 }

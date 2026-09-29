@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs'
 import { readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { CONFIG_FILE } from './lib/project.mjs'
+import { CONFIG_FILE, servedProject } from './lib/project.mjs'
 
 const LEGACY = { name: 'live-feedback', loader: 'liveFeedbackLoader' }
 
@@ -27,10 +27,9 @@ if (!existsSync(legacyConfig)) {
 const config = JSON.parse(await readFile(legacyConfig, 'utf8'))
 const port = config.port ?? 4599
 try {
-  const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
-  if (health.project === root) {
+  if ((await servedProject(port)) === root) {
     console.error(
-      `a ${LEGACY.name} session still serves this project on port ${port}: close it, then migrate again`
+      `a ${LEGACY.name} session still serves this project on port ${port}: close it, then migrate again`,
     )
     process.exit(3)
   }
@@ -65,7 +64,7 @@ if (gitignore?.includes(`/${oldDir}/`)) {
     at('.gitignore'),
     gitignore
       .replaceAll(`/${oldDir}/`, `/${newDir}/`)
-      .replaceAll(`# ${LEGACY.name} skill`, '# code-buddy skill')
+      .replaceAll(`# ${LEGACY.name} skill`, '# code-buddy skill'),
   )
   done.push('updated .gitignore')
 }

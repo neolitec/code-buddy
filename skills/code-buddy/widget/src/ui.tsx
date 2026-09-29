@@ -24,7 +24,8 @@ const PATHS = {
   terminal: 'M4 5h16v14H4zM8 10l3 2-3 2M13 15h4',
   search: 'M16 16l4 4M11 17a6 6 0 1 0 0-12 6 6 0 0 0 0 12z',
   plug: 'M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5',
-  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
+  globe:
+    'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',
   lightning: 'M13 3L5 14h6l-1 7 8-11h-6z',
   wrench: 'M14 6a4 4 0 0 0-5 5l-5 5 4 4 5-5a4 4 0 0 0 5-5l-3 3-3-3z',
 } as const
@@ -120,8 +121,20 @@ export function Spinner({ size = 16 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity=".2" strokeWidth="3" />
-      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke="currentColor"
+        strokeOpacity=".2"
+        strokeWidth="3"
+      />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -206,7 +219,7 @@ export function Toasts() {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    () => toasts
+    () => toasts,
   )
   if (!current.length) return null
   return (

@@ -6,7 +6,7 @@ import { createStore } from './lib/store.mjs'
 
 const args = positional()
 const release = args.includes('--release')
-const [id] = args.filter((arg) => arg !== '--release')
+const id = args.find((arg) => arg !== '--release')
 const project = findProject()
 if (!id || !project) {
   console.error('usage: claim.mjs <id> --project <dir> [--release]')
@@ -22,7 +22,7 @@ if (!comment) {
 }
 if (!release && (comment.status !== 'open' || comment.cancelledAt)) {
   console.error(
-    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; stop working on it`
+    `comment ${id} is ${comment.cancelledAt ? 'cancelled' : comment.status}; stop working on it`,
   )
   process.exit(1)
 }

@@ -8,11 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  anchorFromElement,
-  anchorFromSelection,
-  elementFromAnchor,
-} from './anchors'
+import { anchorFromElement, anchorFromSelection, elementFromAnchor } from './anchors'
 import {
   createComment,
   deleteComment,
@@ -47,6 +43,11 @@ import {
 const PANEL_WIDTH = 380
 const MIN_PANEL_WIDTH = 320
 const MAX_PANEL_RATIO = 0.8
+
+const clampWidth = (value: number) =>
+  Math.round(
+    Math.min(Math.max(value, MIN_PANEL_WIDTH), window.innerWidth * MAX_PANEL_RATIO),
+  )
 const CENTER: ScrollIntoViewOptions = { behavior: 'smooth', block: 'center' }
 const PENDING_CENTER_MS = 5000
 const FLASH_MS = 1500
@@ -96,9 +97,12 @@ interface UiState {
 
 const PAGE_LEVEL: ReviewAnchor = { quote: '', occurrence: 0, section: '' }
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- the caller names what it stored
 function readSession<T>(key: string): T | undefined {
   try {
     const raw = sessionStorage.getItem(key)
+    // Written by writeSession with the same key and type.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
     return raw ? (JSON.parse(raw) as T) : undefined
   } catch {
     return undefined
@@ -139,10 +143,7 @@ function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
   return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
-const submitOnEnter = (
-  event: KeyboardEvent<HTMLTextAreaElement>,
-  busy: boolean
-) => {
+const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>, busy: boolean) => {
   if (event.nativeEvent.isComposing) return false
   if (event.key !== 'Enter' || event.shiftKey) return false
   event.preventDefault()
@@ -152,14 +153,14 @@ const submitOnEnter = (
 
 export default function App({ root }: { root: Element }) {
   const route = useRoute()
-  const saved = useRef(readSession<UiState>(UI_KEY)).current
+  const [saved] = useState(() => readSession<UiState>(UI_KEY))
   const [open, setOpen] = useState(saved?.open ?? false)
   const [docked, setDocked] = useState(saved?.docked ?? false)
   const [width, setWidth] = useState(saved?.width ?? PANEL_WIDTH)
   const [view, setView] = useState<View>(saved?.view ?? 'page')
   const [threadId, setThreadId] = useState(saved?.threadId)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
-    saved?.statusFilter ?? 'open'
+    saved?.statusFilter ?? 'open',
   )
   const [dragging, setDragging] = useState(false)
   const [draft, setDraft] = useState<Draft>()
@@ -171,7 +172,7 @@ export default function App({ root }: { root: Element }) {
   const [picking, setPicking] = useState(false)
   const [target, setTarget] = useState<Element>()
   const [pendingCenter, setPendingCenter] = useState(
-    readSession<PendingCenter>(CENTER_KEY)
+    readSession<PendingCenter>(CENTER_KEY),
   )
   const [flash, setFlash] = useState<Element>()
   const [resend, setResend] = useState<{ id: string; body: string }>()
@@ -231,34 +232,28 @@ export default function App({ root }: { root: Element }) {
     }
   }, [open, docked, width])
 
-  const clampWidth = (value: number) =>
-    Math.round(
-      Math.min(
-        Math.max(value, MIN_PANEL_WIDTH),
-        window.innerWidth * MAX_PANEL_RATIO
-      )
-    )
-
   const toggleDocked = () => {
     setDocked(!docked)
     setWidth(docked ? PANEL_WIDTH : clampWidth(window.innerWidth / 2))
   }
 
+  const resizeTo = (move: MouseEvent) => {
+    setWidth(clampWidth(window.innerWidth - move.clientX))
+  }
+
   const startResize = (event: ReactMouseEvent) => {
     event.preventDefault()
     setDragging(true)
-    const onMove = (move: MouseEvent) =>
-      setWidth(clampWidth(window.innerWidth - move.clientX))
     const onUp = () => {
       setDragging(false)
-      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mousemove', resizeTo)
       document.removeEventListener('mouseup', onUp)
       document.documentElement.style.cursor = ''
       document.documentElement.style.userSelect = ''
     }
     document.documentElement.style.cursor = 'col-resize'
     document.documentElement.style.userSelect = 'none'
-    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mousemove', resizeTo)
     document.addEventListener('mouseup', onUp)
   }
 
@@ -273,7 +268,7 @@ export default function App({ root }: { root: Element }) {
   useEffect(() => () => clearTimeout(flashTimer.current), [])
 
   useEffect(() => {
-    if (!pendingCenter || route !== pendingCenter.path) return
+    if (!pendingCenter || route !== pendingCenter.path) return undefined
     const deadline = Date.now() + PENDING_CENTER_MS
     let frame = 0
     const attempt = () => {
@@ -302,7 +297,7 @@ export default function App({ root }: { root: Element }) {
 
   const pickElement = useCallback(
     (element: Element) => startDraft(anchorFromElement(root, element)),
-    [root, startDraft]
+    [root, startDraft],
   )
 
   const cancelPick = useCallback(() => setPicking(false), [])
@@ -367,8 +362,7 @@ export default function App({ root }: { root: Element }) {
   /** `href` is the comment's page, visited first when it is not this one. */
   const elementChip = (anchor: ReviewAnchor, href?: string, id?: string) => {
     if (!anchor.element) return null
-    const onThisPage =
-      !href || new URL(href, window.location.href).pathname === route
+    const onThisPage = !href || new URL(href, window.location.href).pathname === route
     return (
       <span
         className="cb-element"
@@ -413,7 +407,7 @@ export default function App({ root }: { root: Element }) {
         onClick={(event) => {
           event.stopPropagation()
           if (comment.id === threadId) setThreadId(undefined)
-          run(() => deleteComment(comment.id))
+          void run(() => deleteComment(comment.id))
         }}
       />
     )
@@ -431,17 +425,18 @@ export default function App({ root }: { root: Element }) {
       <div className="cb-thread">
         {threadOf(comment).map((message, index, messages) =>
           message.author === 'claude' ? (
+            // A thread only grows at its end: the index is a stable key.
+            // oxlint-disable-next-line react/no-array-index-key
             <div key={index} className="cb-answer">
               {message.body}
             </div>
           ) : (
+            // oxlint-disable-next-line react/no-array-index-key
             <p key={index}>
-              {messages.length > 2 && index > 0 && (
-                <span className="cb-author">You</span>
-              )}
+              {messages.length > 2 && index > 0 && <span className="cb-author">You</span>}
               {message.body}
             </p>
-          )
+          ),
         )}
       </div>
       {isActive(comment) &&
@@ -497,7 +492,7 @@ export default function App({ root }: { root: Element }) {
               resend?.id === comment.id ? resend.body : latestText(comment)
             ).trim()
             if (!body) return
-            run(async () => {
+            void run(async () => {
               await updateComment(comment.id, { text: body, cancelled: false })
               setResend(undefined)
             })
@@ -506,9 +501,7 @@ export default function App({ root }: { root: Element }) {
           <Textarea
             aria-label="Edit the comment before sending it again"
             value={resend?.id === comment.id ? resend.body : latestText(comment)}
-            onChange={(event) =>
-              setResend({ id: comment.id, body: event.target.value })
-            }
+            onChange={(event) => setResend({ id: comment.id, body: event.target.value })}
           />
           <div className="cb-actions">
             <Button small type="submit" icon="send" disabled={busy}>
@@ -525,7 +518,7 @@ export default function App({ root }: { root: Element }) {
             data-testid="cb-cancel"
             onClick={(event) => {
               event.stopPropagation()
-              run(() => updateComment(comment.id, { cancelled: true }))
+              void run(() => updateComment(comment.id, { cancelled: true }))
             }}
           >
             Cancel
@@ -537,7 +530,7 @@ export default function App({ root }: { root: Element }) {
               variant="tertiary"
               onClick={(event) => {
                 event.stopPropagation()
-                run(() => updateComment(comment.id, { status: 'resolved' }))
+                void run(() => updateComment(comment.id, { status: 'resolved' }))
               }}
             >
               Resolve
@@ -554,7 +547,7 @@ export default function App({ root }: { root: Element }) {
             event.preventDefault()
             const body = followUp?.id === comment.id ? followUp.body.trim() : ''
             if (!body) return
-            run(async () => {
+            void run(async () => {
               await updateComment(comment.id, { followUp: body })
               setFollowUp(undefined)
             })
@@ -661,7 +654,9 @@ export default function App({ root }: { root: Element }) {
     <div className="cb">
       <ElementMarks root={root} comments={comments} activeId={activeId} />
       {outlined && <TargetOutline element={outlined} />}
-      {picking && <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />}
+      {picking && (
+        <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />
+      )}
       {selectionButton && (
         <Button
           small
@@ -756,7 +751,9 @@ export default function App({ root }: { root: Element }) {
             {drafting && (
               <form className="cb-form" onSubmit={submit}>
                 {draft.section && <span className="cb-section">{draft.section}</span>}
-                {draft.quote && <blockquote className="cb-quote">{draft.quote}</blockquote>}
+                {draft.quote && (
+                  <blockquote className="cb-quote">{draft.quote}</blockquote>
+                )}
                 {elementChip(draft)}
                 {!draft.quote && !draft.element && (
                   <Checkbox

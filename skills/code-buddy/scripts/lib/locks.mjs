@@ -3,11 +3,32 @@
 // agents can never both take the same lock.
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { errorCode } from './errors.mjs'
 
 const STALE_MS = Number(process.env.CODE_BUDDY_LOCK_STALE_S ?? 20 * 60) * 1000
 const POLL_MS = 200
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Code-unit order: every process locks files in the same order, so none deadlocks. */
+const byCodeUnit = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
+
+/** Every `*.lock` directory under `dir`, skipping the owners index. */
+async function walk(dir, found = []) {
+  let entries
+  try {
+    entries = await readdir(dir, { withFileTypes: true })
+  } catch {
+    return found
+  }
+  for (const entry of entries) {
+    if (entry.name === '.owners') continue
+    const full = path.join(dir, entry.name)
+    if (entry.name.endsWith('.lock')) found.push(full)
+    else if (entry.isDirectory()) await walk(full, found)
+  }
+  return found
+}
 
 export function createLocks(project) {
   const root = project.locksDir
@@ -18,10 +39,7 @@ export function createLocks(project) {
 
   function relativeTarget(target) {
     if (target === '@build') return target
-    const relative = path.relative(
-      project.root,
-      path.resolve(project.root, target)
-    )
+    const relative = path.relative(project.root, path.resolve(project.root, target))
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error(`${target} is outside the project`)
     }
@@ -31,7 +49,7 @@ export function createLocks(project) {
   async function readOwner(relative) {
     try {
       return JSON.parse(
-        await readFile(path.join(lockDir(relative), 'owner.json'), 'utf8')
+        await readFile(path.join(lockDir(relative), 'owner.json'), 'utf8'),
       )
     } catch {
       return undefined
@@ -43,9 +61,7 @@ export function createLocks(project) {
     try {
       const comments = JSON.parse(await readFile(project.commentsFile, 'utf8'))
       return new Set(
-        comments
-          .filter((c) => c.status === 'open' && !c.cancelledAt)
-          .map((c) => c.id)
+        comments.filter((c) => c.status === 'open' && !c.cancelledAt).map((c) => c.id),
       )
     } catch {
       return undefined
@@ -72,7 +88,7 @@ export function createLocks(project) {
     try {
       await mkdir(dir)
     } catch (error) {
-      if (error.code !== 'EEXIST') throw error
+      if (errorCode(error) !== 'EEXIST') throw error
       const holder = await readOwner(relative)
       if (holder?.owner === owner) return { ok: true }
       if (await isStale(holder, relative)) {
@@ -83,7 +99,7 @@ export function createLocks(project) {
     }
     await writeFile(
       path.join(dir, 'owner.json'),
-      JSON.stringify({ owner, at: Date.now() })
+      JSON.stringify({ owner, at: Date.now() }),
     )
     await mkdir(path.join(ownersDir, owner), { recursive: true })
     await writeFile(indexEntry(owner, relative), '')
@@ -100,9 +116,7 @@ export function createLocks(project) {
 
   async function heldBy(owner) {
     try {
-      return (await readdir(path.join(ownersDir, owner))).map(
-        decodeURIComponent
-      )
+      return (await readdir(path.join(ownersDir, owner))).map(decodeURIComponent)
     } catch {
       return []
     }
@@ -116,9 +130,14 @@ export function createLocks(project) {
   }
 
   /** Takes every lock or none: on timeout releases all of the owner's locks. */
+  /**
+   * @returns {Promise<
+   *   { ok: true } | { ok: false, target: string, holder: string, released: string[] }
+   * >}
+   */
   async function acquire(owner, targets, timeoutS) {
     const deadline = Date.now() + timeoutS * 1000
-    const pending = [...new Set(targets.map(relativeTarget))].sort()
+    const pending = [...new Set(targets.map(relativeTarget))].toSorted(byCodeUnit)
     while (pending.length) {
       const result = await tryLock(owner, pending[0])
       if (result.ok) {
@@ -132,22 +151,6 @@ export function createLocks(project) {
       await sleep(POLL_MS)
     }
     return { ok: true }
-  }
-
-  async function walk(dir, found = []) {
-    let entries
-    try {
-      entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      return found
-    }
-    for (const entry of entries) {
-      if (entry.name === '.owners') continue
-      const full = path.join(dir, entry.name)
-      if (entry.name.endsWith('.lock')) found.push(full)
-      else if (entry.isDirectory()) await walk(full, found)
-    }
-    return found
   }
 
   async function status() {

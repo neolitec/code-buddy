@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 export const CONFIG_FILE = '.code-buddy.json'
 export const SKILL_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  '../..'
+  '../..',
 )
 export const WIDGET_VERSION = 1
 
@@ -37,7 +37,7 @@ export function project(root) {
   const config = JSON.parse(readFileSync(path.join(root, CONFIG_FILE), 'utf8'))
   const state = path.join(
     STATE_ROOT,
-    createHash('sha1').update(root).digest('hex').slice(0, 12)
+    createHash('sha1').update(root).digest('hex').slice(0, 12),
   )
   return {
     root,
@@ -46,11 +46,33 @@ export function project(root) {
       root,
       process.env.CODE_BUDDY_COMMENTS_FILE ??
         config.commentsFile ??
-        '.code-buddy/comments.json'
+        '.code-buddy/comments.json',
     ),
     locksDir: path.join(state, 'locks'),
     progressDir: path.join(state, 'progress'),
   }
+}
+
+/**
+ * The project root served on `port` by a code-buddy server. Rejects when nothing
+ * answers there; resolves to undefined when something else does.
+ * @param {number | string} port
+ * @returns {Promise<string | undefined>}
+ */
+export async function servedProject(port) {
+  const value = Number(port)
+  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+    throw new RangeError(`invalid port: ${String(port)}`)
+  }
+  const url = new URL('/api/health', 'http://127.0.0.1')
+  url.port = String(value)
+  const health = await (await fetch(url)).json()
+  return typeof health === 'object' &&
+    health !== null &&
+    'project' in health &&
+    typeof health.project === 'string'
+    ? health.project
+    : undefined
 }
 
 /** Removes `--project <dir>` so the remaining arguments are positional. */

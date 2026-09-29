@@ -7,21 +7,23 @@
 import { readFile } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
-import { SKILL_DIR, WIDGET_VERSION, findProject } from './lib/project.mjs'
+import { SKILL_DIR, WIDGET_VERSION, findProject, servedProject } from './lib/project.mjs'
 import { APP_ROUTE, createStore, isActive, normaliseQuote } from './lib/store.mjs'
 
-const project = findProject()
-if (!project) {
+const found = findProject()
+if (!found) {
   console.error('no .code-buddy.json found; run /code-buddy:code-buddy init first')
   process.exit(2)
 }
+const project = found
 const { config } = project
 const port = Number(process.env.CODE_BUDDY_PORT ?? config.port ?? 4599)
 const pollMs = Number(process.env.CODE_BUDDY_POLL_MS ?? 1000)
 const store = createStore(project)
 const WIDGET = path.join(SKILL_DIR, 'widget', 'dist', 'widget.js')
 
-const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[\w-]+\.localhost)(:\d+)?$/
+const LOCAL_ORIGIN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|[\w-]+\.localhost)(:\d+)?$/
 const allowedOrigins = new Set(config.devOrigins ?? [])
 
 function corsHeaders(origin) {
@@ -104,16 +106,14 @@ async function handle(req, res) {
       res,
       200,
       { project: project.root, name: config.name, version: WIDGET_VERSION },
-      cors
+      cors,
     )
   }
 
   if (url.pathname === '/api/comments') {
     if (req.method === 'GET') {
       const route =
-        url.searchParams.get('all') === '1'
-          ? undefined
-          : url.searchParams.get('route')
+        url.searchParams.get('all') === '1' ? undefined : url.searchParams.get('route')
       if (route === null || route === '') {
         return send(res, 400, { error: 'route or all=1 is required' }, cors)
       }
@@ -129,7 +129,9 @@ async function handle(req, res) {
         route: input.route.slice(0, 500),
         url: typeof input.url === 'string' ? input.url.slice(0, 2000) : undefined,
         body,
-        section: String(input.section ?? '').trim().slice(0, 300),
+        section: String(input.section ?? '')
+          .trim()
+          .slice(0, 300),
         quote: normaliseQuote(String(input.quote ?? '')).slice(0, 2000),
         occurrence: Math.max(0, Math.floor(Number(input.occurrence) || 0)),
         element: sanitiseElement(input.element),
@@ -209,7 +211,7 @@ async function tick(first) {
         ? `DELETED ${id}`
         : gone.status === 'open'
           ? `CANCELLED ${id}`
-          : `RESOLVED ${id}`
+          : `RESOLVED ${id}`,
     )
     seen.delete(id)
   }
@@ -217,19 +219,19 @@ async function tick(first) {
 
 const server = http.createServer((req, res) => {
   handle(req, res).catch((error) =>
-    send(res, 500, { error: error.message }, corsHeaders(req.headers.origin))
+    send(res, 500, { error: error.message }, corsHeaders(req.headers.origin)),
   )
 })
 
-server.on('error', async (error) => {
+server.on('error', async (/** @type {NodeJS.ErrnoException} */ error) => {
   if (error.code !== 'EADDRINUSE') throw error
   let owner = 'another program'
   try {
-    const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json()
+    const served = await servedProject(port)
     owner =
-      health.project === project.root
+      served === project.root
         ? 'another /code-buddy:code-buddy session for this project'
-        : `the code-buddy server of ${health.project}`
+        : `the code-buddy server of ${served}`
   } catch {}
   console.log(`PORT_BUSY ${port} is used by ${owner}`)
   process.exit(3)
