@@ -170,3 +170,7 @@ follow the [code of conduct](CODE_OF_CONDUCT.md).
 ## License
 
 [MIT](LICENSE) © Kevin Manson
+
+Code Buddy is an independent open source project. It is not affiliated with,
+endorsed by or supported by Anthropic. Claude and Claude Code are trademarks
+of Anthropic, PBC.

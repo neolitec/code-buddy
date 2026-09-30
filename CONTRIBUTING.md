@@ -98,9 +98,10 @@ widget bundles React. Adding one is a design decision; ask in an issue first.
   `refactor`, `perf`, `test`, `ci`, and a lowercase summary in the imperative
   (`fix: keep the panel above modal dialogs`). CI checks it.
 - Fill in the pull request template: what changes, why, and how you tested it.
-- Keep your branch up to date with `main`; a maintainer's review is required,
-  and new commits after an approval need a new one.
-- Code owners review changes to CI, the security policy and the manifests.
+- Keep your branch up to date with `main`. The maintainer reviews every pull
+  request and is the one who merges it.
+- Signed commits are welcome but not required: the squashed commit that lands
+  on `main` is signed by GitHub.
 
 ## Releases
 
