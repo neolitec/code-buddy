@@ -1,16 +1,37 @@
 #!/usr/bin/env node
-// Claude Code hook (PreToolUse, PostToolUse, SubagentStop) registered by the
-// skill. Inert for any agent that has not claimed a comment with claim.mjs.
+// Claude Code hook (PreToolUse, PostToolUse, PostToolUseFailure, SubagentStop)
+// registered by the skill. Inert for any agent that has not claimed a comment
+// with claim.mjs. For one that has, it takes the file locks and records each
+// step for the widget: tools as they start, end or fail, and the thinking and
+// messages read from the agent's transcript.
 import path from 'node:path'
-import { appendProgress, bind, bindingOf, dropProgress, unbind } from './lib/agents.mjs'
+import {
+  appendProgress,
+  bind,
+  bindingOf,
+  dropProgress,
+  pruneBindings,
+  touchBinding,
+  unbind,
+} from './lib/agents.mjs'
 import { createLocks } from './lib/locks.mjs'
 import { project as loadProject } from './lib/project.mjs'
+import {
+  followTranscript,
+  forgetTranscript,
+  newTranscriptSteps,
+} from './lib/transcript.mjs'
 
 const LOCK_TIMEOUT_S = Number(process.env.CODE_BUDDY_LOCK_TIMEOUT_S ?? 45)
 const BUILD = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b|\b(?:next|vite)\s+build\b/
-const CLAIM = /scripts\/claim\.mjs\s+(\S+)/
-const RESOLVE = /scripts\/resolve\.mjs\s+(\S+)/
-const PROJECT = /--project\s+("[^"]+"|'[^']+'|\S+)/
+// A word ends at a shell separator as well as at a space: agents chain
+// `claim.mjs <id> --project <dir>; …`, and a `;` kept in the path bound the
+// agent to a project that does not exist, so none of its steps were recorded.
+const WORD = String.raw`[^\s;&|()<>]+`
+const CLAIM = new RegExp(String.raw`scripts/claim\.mjs\s+(${WORD})`)
+// A question ends the run as an answer does: ask.mjs files the steps itself.
+const RESOLVE = new RegExp(String.raw`scripts/(?:resolve|ask)\.mjs\s+(${WORD})`)
+const PROJECT = new RegExp(String.raw`--project\s+("[^"]+"|'[^']+'|${WORD})`)
 
 async function readInput() {
   let raw = ''
@@ -49,7 +70,7 @@ function describe(root, tool, input) {
       return { kind: 'edit', label: repoPath(input.notebook_path) }
     case 'Bash':
       return CLAIM.test(input.command ?? '')
-        ? { kind: 'skill', label: 'Started' }
+        ? { kind: 'start', label: 'Started' }
         : { kind: 'bash', label: short(input.description || input.command || '') }
     case 'Grep':
     case 'Glob':
@@ -70,11 +91,51 @@ function describe(root, tool, input) {
 
 const unquote = (value) => value.replace(/^["']|["']$/g, '')
 
-async function preToolUse(agent, tool, input) {
+// Claude Code's own plumbing, not the agent's work.
+const INTERNAL_TOOLS = new Set(['SubagentHandback'])
+
+/**
+ * The agent's own transcript. In a subagent, tool events carry no
+ * agent_transcript_path, only the session's transcript_path: the subagent's
+ * transcript sits next to it, in <session>/subagents/agent-<id>.jsonl.
+ */
+function transcriptOf(input) {
+  if (input.agent_transcript_path) return input.agent_transcript_path
+  const session = input.transcript_path
+  if (input.agent_id && typeof session === 'string' && session.endsWith('.jsonl')) {
+    return path.join(
+      session.slice(0, -'.jsonl'.length),
+      'subagents',
+      `agent-${input.agent_id}.jsonl`,
+    )
+  }
+  return session
+}
+
+/**
+ * Records what the transcript shows since the last step, then `step`. Nothing
+ * for a comment the reader cancelled, resolved or deleted, or that waits on
+ * their answer: an agent keeps calling tools until it is stopped, and those
+ * steps would recreate the progress file and end up under the next run.
+ */
+async function record(agent, project, comment, step) {
+  const active = await createLocks(project).activeCommentIds()
+  if (active && !active.has(comment)) return
+  await touchBinding(agent)
+  await appendProgress(project, comment, ...(await newTranscriptSteps(agent)), step)
+}
+
+async function preToolUse(agent, tool, input, toolUseId) {
   const binding = await bindingOf(agent)
-  const target = binding && writeTarget(tool, input)
-  if (!target) return
+  if (!binding) return
   const project = loadProject(binding.root)
+  const step = { at: Date.now(), id: toolUseId, ...describe(project.root, tool, input) }
+  const target = writeTarget(tool, input)
+  if (target) await lockTarget(agent, project, binding, target, step)
+  await record(agent, project, binding.comment, { ...step, state: 'running' })
+}
+
+async function lockTarget(agent, project, binding, target, step) {
   const locks = createLocks(project)
   const active = await locks.activeCommentIds()
   if (active && !active.has(binding.comment)) {
@@ -91,6 +152,11 @@ async function preToolUse(agent, tool, input) {
   }
   const result = await locks.acquire(binding.comment, [relative], LOCK_TIMEOUT_S)
   if (result.ok) return
+  await record(agent, project, binding.comment, {
+    ...step,
+    state: 'failed',
+    error: `${result.target} is being changed by another comment's agent`,
+  })
   process.stderr.write(
     `${result.target} is being changed by the agent of comment ${result.holder}. ` +
       `Your ${result.released.length} lock(s) were released to avoid a deadlock: ` +
@@ -102,50 +168,111 @@ async function preToolUse(agent, tool, input) {
 async function finish(agent, root, comment) {
   const project = loadProject(root)
   await unbind(agent)
+  await forgetTranscript(agent)
   await createLocks(project).releaseAll(comment)
   await dropProgress(project, comment)
 }
 
-async function postToolUse(agent, tool, input) {
-  const command = tool === 'Bash' ? (input.command ?? '') : ''
-  const claim = command.match(CLAIM)
-  const resolve = command.match(RESOLVE)
+/**
+ * Follows the agent's own scripts. claim.mjs binds the agent to its comment;
+ * resolve.mjs and ask.mjs end its run. They run in Bash commands that may
+ * chain other commands, so a failed command can still have run one of them:
+ * the comment's state tells whether it did.
+ * @returns {Promise<boolean>} true when the run ended, and there is nothing to record
+ */
+async function followScripts(agent, command, transcript) {
   const root = command.match(PROJECT)?.[1]
-  if (claim && root) {
-    if (/\s--release\b/.test(command)) {
-      await finish(agent, unquote(root), claim[1])
-      return
+  if (!root) return false
+  const projectRoot = path.resolve(unquote(root))
+  const claim = command.match(CLAIM)
+  const ended = command.match(RESOLVE)
+  if (ended) {
+    const project = loadProject(projectRoot)
+    const active = await createLocks(project).activeCommentIds()
+    if (!active?.has(ended[1])) {
+      await finish(agent, projectRoot, ended[1])
+      return true
     }
-    await bind(agent, path.resolve(unquote(root)), claim[1])
   }
-  if (resolve && root) {
-    await finish(agent, path.resolve(unquote(root)), resolve[1])
-    return
+  if (claim) {
+    await pruneBindings()
+    await bind(agent, projectRoot, claim[1])
+    await followTranscript(agent, transcript)
   }
+  return false
+}
+
+async function postToolUse(agent, tool, input, toolUseId, transcript) {
+  const command = tool === 'Bash' ? (input.command ?? '') : ''
+  if (await followScripts(agent, command, transcript)) return
   const binding = await bindingOf(agent)
   if (!binding) return
   const project = loadProject(binding.root)
   if (BUILD.test(command)) {
     await createLocks(project).unlock(binding.comment, '@build')
   }
-  await appendProgress(project, binding.comment, {
+  await record(agent, project, binding.comment, {
     at: Date.now(),
+    id: toolUseId,
     ...describe(project.root, tool, input),
+    state: 'done',
+  })
+}
+
+async function postToolUseFailure(agent, tool, input, toolUseId, error, transcript) {
+  const command = tool === 'Bash' ? (input.command ?? '') : ''
+  if (await followScripts(agent, command, transcript)) return
+  const binding = await bindingOf(agent)
+  if (!binding) return
+  const project = loadProject(binding.root)
+  // A failed build must free the build lock as a successful one does.
+  if (tool === 'Bash' && BUILD.test(input.command ?? '')) {
+    await createLocks(project).unlock(binding.comment, '@build')
+  }
+  await record(agent, project, binding.comment, {
+    at: Date.now(),
+    id: toolUseId,
+    ...describe(project.root, tool, input),
+    state: 'failed',
+    error: short(
+      String(error ?? '')
+        .trim()
+        .split('\n')[0] ?? '',
+      160,
+    ),
   })
 }
 
 const input = await readInput()
 const agent = input.agent_id ?? `session-${input.session_id}`
+const transcript = transcriptOf(input)
+const tool = input.tool_name
+const toolInput = input.tool_input ?? {}
 try {
-  if (input.hook_event_name === 'PreToolUse') {
-    await preToolUse(agent, input.tool_name, input.tool_input ?? {})
+  if (INTERNAL_TOOLS.has(tool)) {
+    // Nothing to lock or show.
+  } else if (input.hook_event_name === 'PreToolUse') {
+    await preToolUse(agent, tool, toolInput, input.tool_use_id)
   } else if (input.hook_event_name === 'PostToolUse') {
-    await postToolUse(agent, input.tool_name, input.tool_input ?? {})
+    await postToolUse(agent, tool, toolInput, input.tool_use_id, transcript)
+  } else if (input.hook_event_name === 'PostToolUseFailure') {
+    await postToolUseFailure(
+      agent,
+      tool,
+      toolInput,
+      input.tool_use_id,
+      input.error,
+      transcript,
+    )
   } else if (input.hook_event_name === 'SubagentStop' && input.agent_id) {
+    // A stopped agent holds nothing: an agent resumed for a follow-up claims
+    // its comment again. An unbound agent also lets hook.sh skip Node.
     const binding = await bindingOf(input.agent_id)
     if (binding) {
       await createLocks(loadProject(binding.root)).releaseAll(binding.comment)
     }
+    await unbind(input.agent_id)
+    await forgetTranscript(input.agent_id)
   }
 } catch (error) {
   process.stderr.write(

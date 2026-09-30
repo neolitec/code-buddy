@@ -45,10 +45,12 @@ to stop it.
 - **The widget is framework-agnostic.** It ships its own React inside a shadow
   root, so it works on Next.js, Vite, CRA or anything served by a dev server,
   without touching your styles or dependencies.
-- **Agents work in parallel safely.** One background agent per comment; a hook
-  takes a per-file lock before every write, so two agents never edit the same
-  file at once. Their tool calls (files read and edited, commands, MCP calls)
-  show up live under the comment.
+- **Agents work in parallel safely.** One background agent per comment; a
+  plugin hook takes a per-file lock before every write, so two agents never
+  edit the same file at once. What each agent does (files read and edited,
+  commands, MCP calls, its messages and thinking) shows up live under the
+  comment. The hook runs for every tool call of every session, but exits
+  without starting Node unless an agent is working on a comment.
 
 ## Install
 
@@ -92,7 +94,12 @@ from the current directory, else from the repository root.
   later outlines it on the page, clicking it scrolls to it (navigating first
   if it lives on another page).
 - **All comments** lists every discussion, newest first, filtered by status.
-- While Claude works: a spinner, the agent's latest steps, and **Cancel**.
+- While Claude works: what the agent is doing now ("Reading `App.tsx`…",
+  "Thinking…"), its latest steps (files read and edited, commands, searches,
+  MCP calls, failed tools in red, its messages and its thinking), and
+  **Cancel**. Claude Code often hides the thinking itself; its summary shows
+  when available, for instance with `"showThinkingSummaries": true` in your
+  Claude Code settings.
   Cancelling stops the agent and lists the files it had already changed; edit
   the comment and send it again to hand it to a new agent.
 - Once answered: reply in the thread to follow up, reusing the same agent and
@@ -129,7 +136,7 @@ What to do after a change:
 
 | You changed | To see it |
 |---|---|
-| `SKILL.md` (instructions, hooks) | `/reload-plugins` in the session, or a new session |
+| `SKILL.md`, `hooks/hooks.json` | `/reload-plugins` in the session, or a new session |
 | `scripts/*.mjs` except the server | Nothing: each call runs the script again |
 | `scripts/server.mjs`, `scripts/lib/*` | Restart the server: run `/code-buddy:code-buddy` again |
 | `widget/src/*` | Rebuild the widget, then reload the app page |
@@ -140,7 +147,7 @@ reload are enough for the widget. From the repository root:
 ```sh
 npm ci          # once; install scripts are disabled
 npm run build   # type-checks, then rebuilds dist/widget.js
-npm run check   # everything CI checks: format, lint, types, build
+npm run check   # everything CI checks: format, lint, types, build, tests
 ```
 
 `dist/` (`widget.js` and `THIRD_PARTY_LICENSES.txt`, the licenses of the
@@ -154,8 +161,8 @@ Paths below are relative to `skills/code-buddy/`.
 |---|---|
 | `SKILL.md` | The skill: watch, init, update, uninstall; agent prompts |
 | `scripts/server.mjs` | Local server: widget, API, events for the managing session |
-| `scripts/hook.mjs` | Claude Code hook: file locks and live progress |
-| `scripts/claim.mjs`, `resolve.mjs`, `lock.mjs` | Used by the agents |
+| `scripts/hook.sh`, `hook.mjs` | The plugin's hook (declared in `hooks/hooks.json` at the repository root): file locks and live progress |
+| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs`, `lock.mjs` | Used by the agents |
 | `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
 | `widget/src` | The widget (React, TypeScript) |
 

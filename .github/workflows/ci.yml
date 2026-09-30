@@ -57,6 +57,10 @@ jobs:
       - name: Build the widget
         run: npm run build
 
+      # After the build: the server tests serve the built widget.
+      - name: Test
+        run: npm test
+
   plugin:
     name: Validate plugin
     runs-on: ubuntu-24.04

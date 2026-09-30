@@ -26,14 +26,22 @@ export interface ReviewAnchor {
 
 export interface ReviewProgress {
   at: number
+  /** A tool (read, edit, bash, search, mcp…), or the agent's thinking or message. */
   kind: string
+  /** Thinking the API redacted has an empty label. */
   label: string
+  /** Tools only: the call's id, and where it stands. */
+  id?: string
+  state?: 'running' | 'done' | 'failed'
+  error?: string
 }
 
 export interface ReviewMessage {
   author: 'reader' | 'claude'
   body: string
   at: string
+  /** Claude only: a question for the reader rather than an answer. */
+  question?: boolean
 }
 
 export interface ReviewCancellation {
@@ -58,6 +66,8 @@ export interface ReviewComment extends ReviewAnchor {
   resolvedAt?: string
   /** Set by the agent when it starts working on the comment. */
   claimedAt?: string
+  /** Set while Claude waits on the reader's answer to its question. */
+  askedAt?: string
   /** Set while an open comment's run is cancelled, until the reader re-sends it. */
   cancelledAt?: string
   /** Last cancelled run; kept after a re-send so the next agent sees it. */
@@ -76,7 +86,7 @@ export type ReviewCommentPatch = Partial<
 > & {
   /** true stops the current run; false re-sends the comment to a new agent. */
   cancelled?: boolean
-  /** Reopens a resolved comment with the reader's next message. */
+  /** Reopens a resolved comment, or answers Claude's question, with the reader's next message. */
   followUp?: string
   /** With `cancelled: false`: replaces the reader's latest text before re-sending. */
   text?: string
@@ -102,9 +112,16 @@ export function threadOf(comment: ReviewComment): ReviewMessage[] {
     : [question]
 }
 
+type Lifecycle = Pick<ReviewComment, 'status' | 'cancelledAt' | 'askedAt'>
+
 /** True for an open comment an agent should be working on. */
-export function isActive(comment: Pick<ReviewComment, 'status' | 'cancelledAt'>) {
-  return comment.status === 'open' && !comment.cancelledAt
+export function isActive(comment: Lifecycle) {
+  return comment.status === 'open' && !comment.cancelledAt && !comment.askedAt
+}
+
+/** True while Claude waits on the reader: the next move is theirs. */
+export function isAsking(comment: Lifecycle) {
+  return comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
 }
 
 export function normaliseQuote(text: string): string {

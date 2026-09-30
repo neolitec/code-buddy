@@ -5,6 +5,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
@@ -21,7 +22,9 @@ import {
   APP_ROUTE,
   type ReviewAnchor,
   type ReviewComment,
+  type ReviewProgress,
   isActive,
+  isAsking,
   threadOf,
 } from './domain'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
@@ -39,6 +42,7 @@ import {
   Toggle,
   toast,
 } from './ui'
+import { activityOf, isOngoing, stepKey } from './activity'
 import buddy from './assets/buddy.webp'
 
 const REPOSITORY = 'https://github.com/neolitec/code-buddy'
@@ -63,6 +67,7 @@ type StatusFilter = 'all' | 'open' | 'resolved'
 const STATUS_CHIPS = {
   open: 'Open',
   claimed: 'In progress',
+  asking: 'Needs you',
   resolved: 'Resolved',
 } as const
 
@@ -76,6 +81,87 @@ const STEP_ICONS: Record<string, IconName> = {
   mcp: 'plug',
   web: 'globe',
   skill: 'lightning',
+  start: 'lightning',
+  thinking: 'bulb',
+  message: 'chat',
+}
+
+const SLIDE_MS = 250
+
+function StepLine({
+  step,
+  className,
+}: {
+  step: ReviewProgress | undefined
+  className: string
+}) {
+  const failed = !isOngoing(step)
+  return (
+    <div
+      className={`${className}${failed ? ' cb-current-line--failed' : ''}`}
+      title={step?.error}
+    >
+      <Icon name={step ? (STEP_ICONS[step.kind] ?? 'wrench') : 'lightning'} />
+      <span>{activityOf(step)}</span>
+      {!failed && (
+        <span className="cb-dots" aria-hidden="true">
+          <i>.</i>
+          <i>.</i>
+          <i>.</i>
+        </span>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The latest step only, never the list: a new one pushes the previous one out
+ * to the right and comes in from the left.
+ */
+function CurrentStep({ step }: { step: ReviewProgress | undefined }) {
+  const key = stepKey(step)
+  const previous = useRef(step)
+  const [leaving, setLeaving] = useState<ReviewProgress>()
+
+  // A layout effect, so the incoming line never paints once in place before
+  // it starts sliding.
+  useLayoutEffect(() => {
+    const before = previous.current
+    if (stepKey(before) === key) return undefined
+    setLeaving(before)
+    const timer = setTimeout(() => setLeaving(undefined), SLIDE_MS)
+    return () => clearTimeout(timer)
+  }, [key])
+  // After the one above, so it compares against the previous render's step.
+  useLayoutEffect(() => {
+    previous.current = step
+  })
+
+  return (
+    <div className="cb-current" data-testid="cb-progress" aria-live="polite">
+      {leaving && (
+        <StepLine
+          key={`out-${stepKey(leaving)}`}
+          step={leaving}
+          className="cb-current-line cb-current-line--out"
+        />
+      )}
+      <StepLine
+        key={key}
+        step={step}
+        className={`cb-current-line${leaving ? ' cb-current-line--in' : ''}`}
+      />
+    </div>
+  )
+}
+
+// The date as well as the time: a thread can outlive the day it started.
+function MessageTime({ at }: { at: string }) {
+  return (
+    <time className="cb-message-time" dateTime={at}>
+      {new Date(at).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+    </time>
+  )
 }
 
 interface Draft extends ReviewAnchor {
@@ -143,6 +229,7 @@ const paused = (comment: ReviewComment) =>
 
 function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
   if (comment.status === 'resolved') return 'resolved'
+  if (isAsking(comment)) return 'asking'
   return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
@@ -439,42 +526,46 @@ export default function App({ root }: { root: Element }) {
       <div className="cb-thread">
         {threadOf(comment).map((message, index, messages) =>
           message.author === 'claude' ? (
+            // Its steps were only there to wait on it: an answer shows alone.
             // A thread only grows at its end: the index is a stable key.
             // oxlint-disable-next-line react/no-array-index-key
-            <div key={index} className="cb-answer">
-              {message.body}
+            <div key={index} className="cb-answer-group">
+              <div
+                className={`cb-answer${message.question ? ' cb-answer--question' : ''}`}
+              >
+                {message.body}
+              </div>
+              <MessageTime at={message.at} />
             </div>
           ) : (
             // oxlint-disable-next-line react/no-array-index-key
-            <p key={index}>
-              {messages.length > 2 && index > 0 && <span className="cb-author">You</span>}
-              {message.body}
-            </p>
+            <div key={index} className="cb-answer-group">
+              <p>
+                {messages.length > 2 && index > 0 && (
+                  <span className="cb-author">You</span>
+                )}
+                {message.body}
+              </p>
+              <MessageTime at={message.at} />
+            </div>
           ),
         )}
       </div>
       {isActive(comment) &&
-        (comment.claimedAt || watching ? (
+        (comment.claimedAt ? (
+          <div data-testid="cb-working">
+            <CurrentStep step={comment.progress?.at(-1)} />
+          </div>
+        ) : watching ? (
           <div className="cb-working" data-testid="cb-working">
             <Spinner />
-            {comment.claimedAt ? 'Claude is working on it…' : 'Waiting for Claude…'}
+            <span>Waiting for Claude…</span>
           </div>
         ) : (
           <div className="cb-idle" data-testid="cb-unwatched">
             No Claude session is watching. Run /code-buddy:code-buddy.
           </div>
         ))}
-      {isActive(comment) && !!comment.progress?.length && (
-        <ol className="cb-steps" data-testid="cb-progress">
-          {comment.progress.map((step) => (
-            <li key={`${step.at}-${step.label}`}>
-              <Icon name={STEP_ICONS[step.kind] ?? 'wrench'} />
-              <span title={step.label}>{step.label}</span>
-              <time>{new Date(step.at).toLocaleTimeString()}</time>
-            </li>
-          ))}
-        </ol>
-      )}
       {paused(comment) && (
         <div className="cb-stopped" data-testid="cb-cancelled">
           <strong>Claude was stopped.</strong>{' '}
@@ -552,7 +643,9 @@ export default function App({ root }: { root: Element }) {
           )
         )}
       </div>
-      {comment.status === 'resolved' && thread?.id === comment.id && (
+      {/* A question waits on the reader wherever the thread is shown. */}
+      {((comment.status === 'resolved' && thread?.id === comment.id) ||
+        isAsking(comment)) && (
         <form
           className="cb-form"
           data-testid="cb-follow-up"
@@ -568,7 +661,7 @@ export default function App({ root }: { root: Element }) {
           }}
         >
           <Textarea
-            placeholder="Follow up…"
+            placeholder={isAsking(comment) ? 'Answer Claude…' : 'Follow up…'}
             value={followUp?.id === comment.id ? followUp.body : ''}
             onChange={(event) =>
               setFollowUp({ id: comment.id, body: event.target.value })
