@@ -5,7 +5,15 @@
 // step for the widget: tools as they start, end or fail, and the thinking and
 // messages read from the agent's transcript.
 import path from 'node:path'
-import { appendProgress, bind, bindingOf, dropProgress, unbind } from './lib/agents.mjs'
+import {
+  appendProgress,
+  bind,
+  bindingOf,
+  dropProgress,
+  pruneBindings,
+  touchBinding,
+  unbind,
+} from './lib/agents.mjs'
 import { createLocks } from './lib/locks.mjs'
 import { project as loadProject } from './lib/project.mjs'
 import {
@@ -16,9 +24,14 @@ import {
 
 const LOCK_TIMEOUT_S = Number(process.env.CODE_BUDDY_LOCK_TIMEOUT_S ?? 45)
 const BUILD = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b|\b(?:next|vite)\s+build\b/
-const CLAIM = /scripts\/claim\.mjs\s+(\S+)/
-const RESOLVE = /scripts\/resolve\.mjs\s+(\S+)/
-const PROJECT = /--project\s+("[^"]+"|'[^']+'|\S+)/
+// A word ends at a shell separator as well as at a space: agents chain
+// `claim.mjs <id> --project <dir>; …`, and a `;` kept in the path bound the
+// agent to a project that does not exist, so none of its steps were recorded.
+const WORD = String.raw`[^\s;&|()<>]+`
+const CLAIM = new RegExp(String.raw`scripts/claim\.mjs\s+(${WORD})`)
+// A question ends the run as an answer does: ask.mjs files the steps itself.
+const RESOLVE = new RegExp(String.raw`scripts/(?:resolve|ask)\.mjs\s+(${WORD})`)
+const PROJECT = new RegExp(String.raw`--project\s+("[^"]+"|'[^']+'|${WORD})`)
 
 async function readInput() {
   let raw = ''
@@ -57,7 +70,7 @@ function describe(root, tool, input) {
       return { kind: 'edit', label: repoPath(input.notebook_path) }
     case 'Bash':
       return CLAIM.test(input.command ?? '')
-        ? { kind: 'skill', label: 'Started' }
+        ? { kind: 'start', label: 'Started' }
         : { kind: 'bash', label: short(input.description || input.command || '') }
     case 'Grep':
     case 'Glob':
@@ -99,8 +112,16 @@ function transcriptOf(input) {
   return session
 }
 
-/** Records what the transcript shows since the last step, then `step`. */
+/**
+ * Records what the transcript shows since the last step, then `step`. Nothing
+ * for a comment the reader cancelled, resolved or deleted, or that waits on
+ * their answer: an agent keeps calling tools until it is stopped, and those
+ * steps would recreate the progress file and end up under the next run.
+ */
 async function record(agent, project, comment, step) {
+  const active = await createLocks(project).activeCommentIds()
+  if (active && !active.has(comment)) return
+  await touchBinding(agent)
   await appendProgress(project, comment, ...(await newTranscriptSteps(agent)), step)
 }
 
@@ -152,23 +173,38 @@ async function finish(agent, root, comment) {
   await dropProgress(project, comment)
 }
 
-async function postToolUse(agent, tool, input, toolUseId, transcript) {
-  const command = tool === 'Bash' ? (input.command ?? '') : ''
-  const claim = command.match(CLAIM)
-  const resolve = command.match(RESOLVE)
+/**
+ * Follows the agent's own scripts. claim.mjs binds the agent to its comment;
+ * resolve.mjs and ask.mjs end its run. They run in Bash commands that may
+ * chain other commands, so a failed command can still have run one of them:
+ * the comment's state tells whether it did.
+ * @returns {Promise<boolean>} true when the run ended, and there is nothing to record
+ */
+async function followScripts(agent, command, transcript) {
   const root = command.match(PROJECT)?.[1]
-  if (claim && root) {
-    if (/\s--release\b/.test(command)) {
-      await finish(agent, unquote(root), claim[1])
-      return
+  if (!root) return false
+  const projectRoot = path.resolve(unquote(root))
+  const claim = command.match(CLAIM)
+  const ended = command.match(RESOLVE)
+  if (ended) {
+    const project = loadProject(projectRoot)
+    const active = await createLocks(project).activeCommentIds()
+    if (!active?.has(ended[1])) {
+      await finish(agent, projectRoot, ended[1])
+      return true
     }
-    await bind(agent, path.resolve(unquote(root)), claim[1])
+  }
+  if (claim) {
+    await pruneBindings()
+    await bind(agent, projectRoot, claim[1])
     await followTranscript(agent, transcript)
   }
-  if (resolve && root) {
-    await finish(agent, path.resolve(unquote(root)), resolve[1])
-    return
-  }
+  return false
+}
+
+async function postToolUse(agent, tool, input, toolUseId, transcript) {
+  const command = tool === 'Bash' ? (input.command ?? '') : ''
+  if (await followScripts(agent, command, transcript)) return
   const binding = await bindingOf(agent)
   if (!binding) return
   const project = loadProject(binding.root)
@@ -183,7 +219,9 @@ async function postToolUse(agent, tool, input, toolUseId, transcript) {
   })
 }
 
-async function postToolUseFailure(agent, tool, input, toolUseId, error) {
+async function postToolUseFailure(agent, tool, input, toolUseId, error, transcript) {
+  const command = tool === 'Bash' ? (input.command ?? '') : ''
+  if (await followScripts(agent, command, transcript)) return
   const binding = await bindingOf(agent)
   if (!binding) return
   const project = loadProject(binding.root)
@@ -218,7 +256,14 @@ try {
   } else if (input.hook_event_name === 'PostToolUse') {
     await postToolUse(agent, tool, toolInput, input.tool_use_id, transcript)
   } else if (input.hook_event_name === 'PostToolUseFailure') {
-    await postToolUseFailure(agent, tool, toolInput, input.tool_use_id, input.error)
+    await postToolUseFailure(
+      agent,
+      tool,
+      toolInput,
+      input.tool_use_id,
+      input.error,
+      transcript,
+    )
   } else if (input.hook_event_name === 'SubagentStop' && input.agent_id) {
     // A stopped agent holds nothing: an agent resumed for a follow-up claims
     // its comment again. An unbound agent also lets hook.sh skip Node.

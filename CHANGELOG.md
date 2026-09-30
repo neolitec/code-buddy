@@ -9,6 +9,9 @@ released to the `stable` branch.
 
 ### Added
 
+- Claude can ask the reader a question in the thread (`ask.mjs`) instead of
+  guessing; the comment waits on the reader's answer.
+
 - The widget shows what the agent is doing now ("Reading `App.tsx`…",
   "Thinking…") and a fuller trail: tools as they start, end or fail, the
   agent's messages, and its thinking (a summary when Claude Code provides one).
@@ -20,6 +23,16 @@ released to the `stable` branch.
   plugin now declares them, and they skip Node unless an agent works on a
   comment.
 - A build that failed kept its build lock until the agent stopped.
+- An agent still working after the reader stopped it recorded steps that then
+  showed under the next run.
+- Tools called in parallel recorded the agent's thinking and messages twice.
+- A claim or an answer chained with a command that failed was ignored: the
+  agent worked without file locks, or kept its locks after answering.
+- A binding left by a killed agent made every Claude Code session start Node
+  for each tool call; bindings silent for two hours are now ignored and pruned.
+- Two processes could break the same abandoned lock on the comments file and
+  both write it, losing one change.
+- Claude's answers no longer carry the run's steps in `comments.json`.
 
 ## 0.1.0 - 2026-09-29
 

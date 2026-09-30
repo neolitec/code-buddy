@@ -1,8 +1,10 @@
 // Follows a subagent's transcript to show what hooks cannot: its thinking and
 // the messages it writes between tool calls. Claude Code writes the transcript
 // asynchronously, so a step may show one tool call late.
+import { existsSync } from 'node:fs'
 import { mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { withFileLock } from './filelock.mjs'
 import { AGENTS_DIR } from './project.mjs'
 
 const MAX_TEXT = 400
@@ -42,11 +44,26 @@ export async function forgetTranscript(agent) {
 
 /**
  * The thinking and messages the agent wrote since the last call, oldest first.
- * The API often redacts thinking: such a step has an empty label.
+ * The API often redacts thinking: such a step has an empty label. Hooks for
+ * parallel tool calls run at once: the cursor is read and moved under a lock,
+ * so each block is returned to one of them only.
  * @param {string} agent
  * @returns {Promise<TranscriptStep[]>}
  */
 export async function newTranscriptSteps(agent) {
+  const file = cursorFile(agent)
+  if (!existsSync(file)) return []
+  return withFileLock(file, () => readNewSteps(agent), {
+    staleMs: 5_000,
+    timeoutMs: 10_000,
+  })
+}
+
+/**
+ * @param {string} agent
+ * @returns {Promise<TranscriptStep[]>}
+ */
+async function readNewSteps(agent) {
   /** @type {{ file: string, offset: number }} */
   let cursor
   try {

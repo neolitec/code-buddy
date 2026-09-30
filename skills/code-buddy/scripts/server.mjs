@@ -2,14 +2,20 @@
 // server.mjs --project <dir>
 // Serves the widget and its API to the project's dev app, and prints one line
 // per comment needing attention (the manager reads them through Monitor):
-// OPEN (backlog at start), NEW, FOLLOWUP, EDIT, RESOLVED, CANCELLED, DELETED.
+// OPEN (backlog at start), NEW, FOLLOWUP, EDIT, ASKED, RESOLVED, CANCELLED, DELETED.
 // Only runs while /code-buddy is active: no server, no widget.
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
 import { SKILL_DIR, WIDGET_VERSION, findProject, servedProject } from './lib/project.mjs'
-import { APP_ROUTE, createStore, isActive, normaliseQuote } from './lib/store.mjs'
+import {
+  APP_ROUTE,
+  createStore,
+  isActive,
+  isAsking,
+  normaliseQuote,
+} from './lib/store.mjs'
 
 const found = findProject()
 if (!found) {
@@ -239,9 +245,11 @@ async function tick(first) {
     console.log(
       !gone
         ? `DELETED ${id}`
-        : gone.status === 'open'
-          ? `CANCELLED ${id}`
-          : `RESOLVED ${id}`,
+        : isAsking(gone)
+          ? `ASKED ${id}`
+          : gone.status === 'open'
+            ? `CANCELLED ${id}`
+            : `RESOLVED ${id}`,
     )
     seen.delete(id)
   }

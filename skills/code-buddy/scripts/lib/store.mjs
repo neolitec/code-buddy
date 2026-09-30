@@ -2,12 +2,34 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { errorCode } from './errors.mjs'
+import { withFileLock } from './filelock.mjs'
 
 export const APP_ROUTE = '*'
 const PROGRESS_SHOWN = 10
 const WRITE_KINDS = new Set(['edit', 'write', 'multiedit'])
+// What the agent says and thinks accompanies its steps; it is not one.
+const NARRATION_KINDS = new Set(['thinking', 'message'])
 
-export const isActive = (comment) => comment.status === 'open' && !comment.cancelledAt
+/** Open, not stopped by the reader, and not waiting on the reader's answer. */
+export const isActive = (comment) =>
+  comment.status === 'open' && !comment.cancelledAt && !comment.askedAt
+
+/** Claude asked the reader a question in the thread: nothing to do until they answer. */
+export const isAsking = (comment) =>
+  comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
+
+/** A refusal a script reports to the agent and exits on, with nothing written. */
+export class StoreRefusal extends Error {}
+
+/** Why an agent may not work on `comment`, in the words the scripts print. */
+export const stateOf = (comment) =>
+  comment.cancelledAt
+    ? 'cancelled'
+    : comment.status !== 'open'
+      ? comment.status
+      : comment.askedAt
+        ? "waiting on the reader's answer"
+        : 'open'
 
 /** The thread as a list, including the question and a legacy `resolution`. */
 export function threadOf(comment) {
@@ -25,11 +47,48 @@ export function threadOf(comment) {
     : [question]
 }
 
+/**
+ * The comment's steps, oldest first. A tool writes one line when it starts and
+ * one when it ends or fails, both with its tool_use_id: they merge into one
+ * step, in the place where it started.
+ * @param {{ progressDir: string }} project
+ * @param {string} id
+ * @param {number} [limit]
+ */
+export async function readProgress(project, id, limit) {
+  let lines
+  try {
+    lines = (await readFile(progressPath(project, id), 'utf8')).trim().split('\n')
+  } catch {
+    return []
+  }
+  const steps = []
+  const byTool = new Map()
+  for (const line of lines) {
+    let step
+    try {
+      step = JSON.parse(line)
+    } catch {
+      continue
+    }
+    const started = step.id ? byTool.get(step.id) : undefined
+    if (started) {
+      Object.assign(started, step, { at: started.at })
+    } else {
+      steps.push(step)
+      if (step.id) byTool.set(step.id, step)
+    }
+  }
+  return limit ? steps.slice(-limit) : steps
+}
+
+const progressPath = (project, id) => path.join(project.progressDir, `${id}.jsonl`)
+
 export const normaliseQuote = (text) => text.replace(/\s+/g, ' ').trim()
 
 export function createStore(project) {
   const file = project.commentsFile
-  const progressFile = (id) => path.join(project.progressDir, `${id}.jsonl`)
+  const progressFile = (id) => progressPath(project, id)
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve()
 
@@ -44,6 +103,15 @@ export function createStore(project) {
     queue = next.catch(() => undefined)
     return next
   }
+
+  /**
+   * A read-modify-write: in order within this process, and under the file lock
+   * against the others.
+   * @template T
+   * @param {() => Promise<T>} task
+   * @returns {Promise<T>}
+   */
+  const exclusive = (task) => serialise(() => withFileLock(file, task))
 
   async function readAll() {
     try {
@@ -62,40 +130,8 @@ export function createStore(project) {
     await rename(temp, file)
   }
 
-  /**
-   * The comment's steps, oldest first. A tool writes one line when it starts and
-   * one when it ends or fails, both with its tool_use_id: they merge into one
-   * step, in the place where it started.
-   */
-  async function readProgress(id, limit) {
-    let lines
-    try {
-      lines = (await readFile(progressFile(id), 'utf8')).trim().split('\n')
-    } catch {
-      return []
-    }
-    const steps = []
-    const byTool = new Map()
-    for (const line of lines) {
-      let step
-      try {
-        step = JSON.parse(line)
-      } catch {
-        continue
-      }
-      const started = step.id ? byTool.get(step.id) : undefined
-      if (started) {
-        Object.assign(started, step, { at: started.at })
-      } else {
-        steps.push(step)
-        if (step.id) byTool.set(step.id, step)
-      }
-    }
-    return limit ? steps.slice(-limit) : steps
-  }
-
   async function cancellationOf(id) {
-    const steps = await readProgress(id)
+    const steps = await readProgress(project, id)
     await rm(progressFile(id), { force: true })
     return {
       at: new Date().toISOString(),
@@ -107,13 +143,65 @@ export function createStore(project) {
             .map((s) => s.label),
         ),
       ],
-      steps: steps.length,
+      steps: steps.filter((s) => !NARRATION_KINDS.has(s.kind)).length,
     }
   }
 
   return {
     readAll,
-    writeAll,
+
+    /**
+     * Runs `change` on every comment, under the lock, and writes the result.
+     * Throwing a StoreRefusal from it writes nothing.
+     * @template T
+     * @param {(comments: any[]) => Promise<T> | T} change
+     * @returns {Promise<T>}
+     */
+    transact(change) {
+      return exclusive(async () => {
+        const comments = await readAll()
+        const result = await change(comments)
+        await writeAll(comments)
+        return result
+      })
+    },
+
+    /**
+     * Files Claude's answer under the comment. A question leaves the comment
+     * open and waiting on the reader: asked only in the manager's chat, it used
+     * to leave a thread open with no answer and no agent, showing "Waiting for
+     * Claude" to a reader who was the one being waited on. The run's steps are
+     * dropped: comments.json holds the discussion, not the agent's log.
+     * @param {string} id
+     * @param {string} body
+     * @param {{ question?: boolean }} [options]
+     */
+    answer(id, body, { question = false } = {}) {
+      return exclusive(async () => {
+        const comments = await readAll()
+        const comment = comments.find((entry) => entry.id === id)
+        if (!comment) throw new StoreRefusal(`no comment with id ${id}`)
+        if (!isActive(comment)) {
+          throw new StoreRefusal(`comment ${id} is ${stateOf(comment)}`)
+        }
+        const now = new Date().toISOString()
+        comment.messages = [
+          ...threadOf(comment).slice(1),
+          { author: 'claude', body, at: now, ...(question ? { question: true } : {}) },
+        ]
+        if (question) {
+          comment.askedAt = now
+        } else {
+          comment.status = 'resolved'
+          comment.resolution = body
+          comment.resolvedAt = now
+        }
+        delete comment.claimedAt
+        await writeAll(comments)
+        await rm(progressFile(id), { force: true })
+        return comment
+      })
+    },
 
     list(route) {
       return serialise(async () => {
@@ -121,17 +209,18 @@ export function createStore(project) {
           (c) => route === undefined || c.route === route || c.route === APP_ROUTE,
         )
         return Promise.all(
-          comments.map(async (c) =>
-            isActive(c) && c.claimedAt
-              ? { ...c, progress: await readProgress(c.id, PROGRESS_SHOWN) }
-              : c,
-          ),
+          // Only a run in progress has steps to show.
+          comments.map(async (c) => {
+            if (!isActive(c) || !c.claimedAt) return c
+            const progress = await readProgress(project, c.id, PROGRESS_SHOWN)
+            return progress.length ? { ...c, progress } : c
+          }),
         )
       })
     },
 
     create(input) {
-      return serialise(async () => {
+      return exclusive(async () => {
         const comments = await readAll()
         const comment = {
           id: randomUUID(),
@@ -145,7 +234,7 @@ export function createStore(project) {
     },
 
     update(id, patch) {
-      return serialise(async () => {
+      return exclusive(async () => {
         const comments = await readAll()
         const index = comments.findIndex((c) => c.id === id)
         if (index === -1) return undefined
@@ -179,6 +268,8 @@ export function createStore(project) {
           cancellation: cancelling ? await cancellationOf(id) : current.cancellation,
           claimedAt:
             fields.status || cancelled !== undefined ? undefined : current.claimedAt,
+          // The reader's answer, or resolving it themselves, ends the wait.
+          askedAt: fields.status ? undefined : current.askedAt,
           resolvedAt:
             fields.status === 'resolved' && current.status !== 'resolved'
               ? now
@@ -188,12 +279,14 @@ export function createStore(project) {
         }
         comments[index] = updated
         await writeAll(comments)
+        // Resolved by the reader: no answer to file the steps under.
+        if (fields.status === 'resolved') await rm(progressFile(id), { force: true })
         return updated
       })
     },
 
     remove(id) {
-      return serialise(async () => {
+      return exclusive(async () => {
         const comments = await readAll()
         const remaining = comments.filter((c) => c.id !== id)
         if (remaining.length === comments.length) return false

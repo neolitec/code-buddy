@@ -4,6 +4,7 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { errorCode } from './errors.mjs'
+import { isActive } from './store.mjs'
 
 const STALE_MS = Number(process.env.CODE_BUDDY_LOCK_STALE_S ?? 20 * 60) * 1000
 const POLL_MS = 200
@@ -56,13 +57,11 @@ export function createLocks(project) {
     }
   }
 
-  /** Ids of open comments whose run has not been cancelled by the reader. */
+  /** Ids of the comments an agent may work on: open, not stopped, not waiting on the reader. */
   async function activeCommentIds() {
     try {
       const comments = JSON.parse(await readFile(project.commentsFile, 'utf8'))
-      return new Set(
-        comments.filter((c) => c.status === 'open' && !c.cancelledAt).map((c) => c.id),
-      )
+      return new Set(comments.filter(isActive).map((c) => c.id))
     } catch {
       return undefined
     }

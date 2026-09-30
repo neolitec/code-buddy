@@ -25,6 +25,12 @@
       "env": {
         "browser": true
       }
+    },
+    {
+      "files": ["test/**"],
+      "rules": {
+        "typescript/no-floating-promises": "off"
+      }
     }
   ],
   "rules": {

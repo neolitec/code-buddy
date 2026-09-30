@@ -147,7 +147,7 @@ reload are enough for the widget. From the repository root:
 ```sh
 npm ci          # once; install scripts are disabled
 npm run build   # type-checks, then rebuilds dist/widget.js
-npm run check   # everything CI checks: format, lint, types, build
+npm run check   # everything CI checks: format, lint, types, build, tests
 ```
 
 `dist/` (`widget.js` and `THIRD_PARTY_LICENSES.txt`, the licenses of the
@@ -162,7 +162,7 @@ Paths below are relative to `skills/code-buddy/`.
 | `SKILL.md` | The skill: watch, init, update, uninstall; agent prompts |
 | `scripts/server.mjs` | Local server: widget, API, events for the managing session |
 | `scripts/hook.sh`, `hook.mjs` | The plugin's hook (declared in `hooks/hooks.json` at the repository root): file locks and live progress |
-| `scripts/claim.mjs`, `resolve.mjs`, `lock.mjs` | Used by the agents |
+| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs`, `lock.mjs` | Used by the agents |
 | `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
 | `widget/src` | The widget (React, TypeScript) |
 

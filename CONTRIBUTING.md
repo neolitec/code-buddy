@@ -62,12 +62,17 @@ It runs, in order:
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
 | `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
+| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, transcript, store, hooks, server, widget wording |
 
 Rules that go with them:
 
 - **The built widget is not committed.** `widget/dist/` is git-ignored on
   `main`: build it locally to try your changes, and let the Release workflow
   publish it on the `stable` branch.
+- **Behavior changes come with tests.** A bug fix starts with a test that
+  fails without it. The tests run the scripts as Claude Code does (hook
+  events on stdin, a real server on a free port) in throwaway folders; they
+  need no network and no Claude Code.
 - **Scripts are plain JavaScript with JSDoc types**, type-checked by TypeScript.
   Add types where the checker needs them rather than silencing it.
 - **Lint exceptions are rare and explained.** Disable a rule for one line only,

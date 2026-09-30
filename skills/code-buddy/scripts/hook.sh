@@ -5,8 +5,10 @@
 # comment or has claimed one.
 input=$(cat)
 agents="${CODE_BUDDY_STATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/code-buddy}/agents"
+# Only bindings touched in the last two hours count (BINDING_TTL_MS in
+# lib/agents.mjs): one left by a killed agent must not slow every session.
 case "$input" in
   *scripts/claim.mjs*) ;;
-  *) [ -n "$(ls -A "$agents" 2>/dev/null)" ] || exit 0 ;;
+  *) [ -n "$(find "$agents" -maxdepth 1 -type f -mmin -120 2>/dev/null | head -n 1)" ] || exit 0 ;;
 esac
 printf '%s' "$input" | node "$(dirname "$0")/hook.mjs"

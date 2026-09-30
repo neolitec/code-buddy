@@ -65,8 +65,9 @@ given) resumes it and nothing is lost.
 | Line | Action |
 |---|---|
 | `OPEN` / `NEW <id> …` | Start a subagent, unless one already runs for `<id>`. |
-| `FOLLOWUP <id> …` | The reader answered a resolved or stopped comment. If subagent `cb-<first 8 chars of id>` exists in this session (running or finished), SendMessage it the follow-up message below; otherwise start a new subagent. |
+| `FOLLOWUP <id> …` | The reader answered a resolved or stopped comment, or Claude's question. If subagent `cb-<first 8 chars of id>` exists in this session (running or finished), SendMessage it the follow-up message below; otherwise start a new subagent. |
 | `EDIT <id> …` | SendMessage the new text to that comment's subagent; start one if none runs. |
+| `ASKED <id>` | The subagent put a question in the thread; the reader's answer comes back as `FOLLOWUP`. Nothing to do. |
 | `RESOLVED` / `CANCELLED` / `DELETED <id>` | TaskStop that comment's subagent if it still runs; drop it from the queue. |
 
 Start subagents with the Agent tool: `run_in_background: true`, `name:
@@ -76,8 +77,9 @@ queue the rest. `CANCELLED` means the reader stopped the run: the discussion
 stays open and comes back as `FOLLOWUP` or `NEW` when they send it again.
 
 When a subagent returns, tell the user its one line (nothing for
-`CANCELLED`). If it returned `QUESTION: …`, relay the question in the chat;
-when the user answers, SendMessage the answer to the same subagent.
+`CANCELLED`). If it returned `QUESTION: …`, relay the question in the chat
+too; when the user answers there rather than in the widget, SendMessage the
+answer to the same subagent.
 
 ### Subagent prompt
 
@@ -86,7 +88,8 @@ when the user answers, SendMessage the answer to the same subagent.
 > 1. Claim it: `node SKILL/scripts/claim.mjs <id> --project PROJECT`. This
 >    shows the reader a spinner and your progress, and ties your edits to the
 >    comment's file locks. If the claim fails because the comment was
->    cancelled or resolved, stop and reply `CANCELLED`.
+>    cancelled, resolved or is waiting on the reader, stop and reply
+>    `CANCELLED`.
 > 2. Read the entry in `<commentsFile>` if the line is not enough: `route`,
 >    `url`, `section`, and a text `quote` or a pointed `element` (selector from
 >    `body`, tag, text, HTML excerpt). `route` `*` means the whole app.
@@ -107,9 +110,9 @@ when the user answers, SendMessage the answer to the same subagent.
 >    `node SKILL/scripts/resolve.mjs <id> --project PROJECT "<answer>"` (pipe
 >    the answer on stdin when it is long).
 > 6. Reply with one line saying what changed. If the comment is unclear or
->    needs a product decision, do not guess: release it with
->    `node SKILL/scripts/claim.mjs <id> --project PROJECT --release` and reply
->    `QUESTION: <your question>`.
+>    needs a product decision, do not guess: ask it in the thread with
+>    `node SKILL/scripts/ask.mjs <id> --project PROJECT "<question>"` (stdin
+>    works too) and reply `QUESTION: <your question>`.
 
 ### Follow-up message (to an existing subagent)
 
