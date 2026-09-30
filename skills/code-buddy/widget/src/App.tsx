@@ -21,6 +21,7 @@ import {
   APP_ROUTE,
   type ReviewAnchor,
   type ReviewComment,
+  type ReviewProgress,
   isActive,
   threadOf,
 } from './domain'
@@ -76,6 +77,33 @@ const STEP_ICONS: Record<string, IconName> = {
   mcp: 'plug',
   web: 'globe',
   skill: 'lightning',
+  thinking: 'bulb',
+  message: 'chat',
+}
+
+const RUNNING: Record<string, string> = {
+  read: 'Reading',
+  edit: 'Editing',
+  multiedit: 'Editing',
+  write: 'Writing',
+  bash: 'Running',
+  search: 'Searching',
+  mcp: 'Calling',
+  web: 'Browsing',
+  skill: 'Using',
+}
+
+/** What the agent is doing now, from its latest step. */
+function activityOf(progress: ReviewProgress[] | undefined): string {
+  const last = progress?.at(-1)
+  if (last?.state === 'running') return `${RUNNING[last.kind] ?? 'Using'} ${last.label}…`
+  if (last?.kind === 'thinking') return 'Thinking…'
+  return 'Claude is working on it…'
+}
+
+function stepText(step: ReviewProgress): string {
+  if (step.kind === 'thinking') return step.label || 'Thinking'
+  return step.label
 }
 
 interface Draft extends ReviewAnchor {
@@ -457,7 +485,9 @@ export default function App({ root }: { root: Element }) {
         (comment.claimedAt || watching ? (
           <div className="cb-working" data-testid="cb-working">
             <Spinner />
-            {comment.claimedAt ? 'Claude is working on it…' : 'Waiting for Claude…'}
+            <span>
+              {comment.claimedAt ? activityOf(comment.progress) : 'Waiting for Claude…'}
+            </span>
           </div>
         ) : (
           <div className="cb-idle" data-testid="cb-unwatched">
@@ -467,9 +497,24 @@ export default function App({ root }: { root: Element }) {
       {isActive(comment) && !!comment.progress?.length && (
         <ol className="cb-steps" data-testid="cb-progress">
           {comment.progress.map((step) => (
-            <li key={`${step.at}-${step.label}`}>
-              <Icon name={STEP_ICONS[step.kind] ?? 'wrench'} />
-              <span title={step.label}>{step.label}</span>
+            <li
+              key={`${step.at}-${step.kind}-${step.id ?? step.label}`}
+              className={[
+                step.state && `cb-step--${step.state}`,
+                (step.kind === 'thinking' || step.kind === 'message') && 'cb-step--prose',
+                step.kind === 'thinking' && !step.label && 'cb-step--redacted',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              {step.state === 'running' ? (
+                <Spinner size={14} />
+              ) : (
+                <Icon name={STEP_ICONS[step.kind] ?? 'wrench'} />
+              )}
+              <span title={step.error ? `${step.label}: ${step.error}` : stepText(step)}>
+                {stepText(step)}
+              </span>
               <time>{new Date(step.at).toLocaleTimeString()}</time>
             </li>
           ))}

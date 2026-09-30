@@ -154,6 +154,7 @@ code { font-family: var(--cb-mono); }
 .cb-thread { display: flex; flex-direction: column; gap: 8px; }
 .cb-answer { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-green-bg); color: var(--cb-green); font-size: 13px; white-space: pre-wrap; }
 .cb-working { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--cb-accent); }
+.cb-working span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-stopped { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-red-bg); color: var(--cb-red); font-size: 13px; }
 .cb-stopped code { overflow-wrap: anywhere; }
 .cb-steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--cb-muted); }
@@ -162,6 +163,12 @@ code { font-family: var(--cb-mono); }
 .cb-steps span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-steps time { font-variant-numeric: tabular-nums; }
 .cb-steps svg { width: 14px; height: 14px; flex-shrink: 0; }
+.cb-steps li.cb-step--failed { color: var(--cb-red); }
+/* Thinking and messages are sentences: up to two lines rather than one. */
+.cb-steps li.cb-step--prose { align-items: flex-start; }
+.cb-steps li.cb-step--prose span { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.cb-steps li.cb-step--prose svg, .cb-steps li.cb-step--prose time { margin-top: 1px; }
+.cb-steps li.cb-step--redacted span { font-style: italic; }
 
 .cb-element { display: inline-flex; align-items: baseline; gap: 4px; max-width: 100%; margin: 0 -4px; padding: 0 4px; border-radius: 6px; font-size: 13px; color: var(--cb-muted); cursor: pointer; }
 .cb-element:hover { background: var(--cb-surface-2); }

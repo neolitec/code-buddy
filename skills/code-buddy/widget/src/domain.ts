@@ -26,8 +26,14 @@ export interface ReviewAnchor {
 
 export interface ReviewProgress {
   at: number
+  /** A tool (read, edit, bash, search, mcp…), or the agent's thinking or message. */
   kind: string
+  /** Thinking the API redacted has an empty label. */
   label: string
+  /** Tools only: the call's id, and where it stands. */
+  id?: string
+  state?: 'running' | 'done' | 'failed'
+  error?: string
 }
 
 export interface ReviewMessage {

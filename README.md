@@ -92,7 +92,12 @@ from the current directory, else from the repository root.
   later outlines it on the page, clicking it scrolls to it (navigating first
   if it lives on another page).
 - **All comments** lists every discussion, newest first, filtered by status.
-- While Claude works: a spinner, the agent's latest steps, and **Cancel**.
+- While Claude works: what the agent is doing now ("Reading `App.tsx`…",
+  "Thinking…"), its latest steps (files read and edited, commands, searches,
+  MCP calls, failed tools in red, its messages and its thinking), and
+  **Cancel**. Claude Code often hides the thinking itself; its summary shows
+  when available, for instance with `"showThinkingSummaries": true` in your
+  Claude Code settings.
   Cancelling stops the agent and lists the files it had already changed; edit
   the comment and send it again to hand it to a new agent.
 - Once answered: reply in the thread to follow up, reusing the same agent and

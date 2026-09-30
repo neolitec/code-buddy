@@ -7,6 +7,16 @@ released to the `stable` branch.
 
 ## Unreleased
 
+### Added
+
+- The widget shows what the agent is doing now ("Reading `App.tsx`…",
+  "Thinking…") and a fuller trail: tools as they start, end or fail, the
+  agent's messages, and its thinking (a summary when Claude Code provides one).
+
+### Fixed
+
+- A build that failed kept its build lock until the agent stopped.
+
 ## 0.1.0 - 2026-09-29
 
 First release.

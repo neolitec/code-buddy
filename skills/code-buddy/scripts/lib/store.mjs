@@ -4,7 +4,7 @@ import path from 'node:path'
 import { errorCode } from './errors.mjs'
 
 export const APP_ROUTE = '*'
-const PROGRESS_SHOWN = 6
+const PROGRESS_SHOWN = 10
 const WRITE_KINDS = new Set(['edit', 'write', 'multiedit'])
 
 export const isActive = (comment) => comment.status === 'open' && !comment.cancelledAt
@@ -62,13 +62,36 @@ export function createStore(project) {
     await rename(temp, file)
   }
 
+  /**
+   * The comment's steps, oldest first. A tool writes one line when it starts and
+   * one when it ends or fails, both with its tool_use_id: they merge into one
+   * step, in the place where it started.
+   */
   async function readProgress(id, limit) {
+    let lines
     try {
-      const lines = (await readFile(progressFile(id), 'utf8')).trim().split('\n')
-      return lines.slice(limit ? -limit : 0).map((line) => JSON.parse(line))
+      lines = (await readFile(progressFile(id), 'utf8')).trim().split('\n')
     } catch {
       return []
     }
+    const steps = []
+    const byTool = new Map()
+    for (const line of lines) {
+      let step
+      try {
+        step = JSON.parse(line)
+      } catch {
+        continue
+      }
+      const started = step.id ? byTool.get(step.id) : undefined
+      if (started) {
+        Object.assign(started, step, { at: started.at })
+      } else {
+        steps.push(step)
+        if (step.id) byTool.set(step.id, step)
+      }
+    }
+    return limit ? steps.slice(-limit) : steps
   }
 
   async function cancellationOf(id) {
@@ -77,7 +100,12 @@ export function createStore(project) {
     return {
       at: new Date().toISOString(),
       changed: [
-        ...new Set(steps.filter((s) => WRITE_KINDS.has(s.kind)).map((s) => s.label)),
+        ...new Set(
+          steps
+            // A failed write changed nothing; one cut short by the stop may have.
+            .filter((s) => WRITE_KINDS.has(s.kind) && s.state !== 'failed')
+            .map((s) => s.label),
+        ),
       ],
       steps: steps.length,
     }

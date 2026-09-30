@@ -22,11 +22,12 @@ export async function unbind(agent) {
   await rm(bindingFile(agent), { force: true })
 }
 
-export async function appendProgress(project, comment, entry) {
+export async function appendProgress(project, comment, ...entries) {
+  if (!entries.length) return
   await mkdir(project.progressDir, { recursive: true })
   await appendFile(
     path.join(project.progressDir, `${comment}.jsonl`),
-    `${JSON.stringify(entry)}\n`,
+    entries.map((entry) => `${JSON.stringify(entry)}\n`).join(''),
   )
 }
 

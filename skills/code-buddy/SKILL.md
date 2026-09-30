@@ -13,12 +13,18 @@ description:
   feedback widget, or says "/code-buddy" or "/code-buddy:code-buddy".
 hooks:
   PreToolUse:
-    - matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash'
+    - matcher: '*'
       hooks:
         - type: command
           command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
           timeout: 60
   PostToolUse:
+    - matcher: '*'
+      hooks:
+        - type: command
+          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
+          timeout: 10
+  PostToolUseFailure:
     - matcher: '*'
       hooks:
         - type: command
