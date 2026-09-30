@@ -39,7 +39,8 @@ To try your changes in a real app, load the plugin from your clone; see
 | Path                                  | What                                                                |
 | ------------------------------------- | ------------------------------------------------------------------- |
 | `.claude-plugin/`                     | Plugin and marketplace manifests                                    |
-| `skills/code-buddy/SKILL.md`          | The skill Claude reads: modes, agent prompts, hooks                 |
+| `hooks/hooks.json`                    | The plugin's hooks: file locks and progress, in every agent         |
+| `skills/code-buddy/SKILL.md`          | The skill Claude reads: modes, agent prompts                        |
 | `skills/code-buddy/scripts/`          | Node.js scripts (ES modules, JSDoc types), run by the skill         |
 | `skills/code-buddy/widget/src/`       | The browser widget (React, TypeScript)                              |
 | `skills/code-buddy/widget/dist/`      | The built widget: `npm run build`; never committed on `main`        |

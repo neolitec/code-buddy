@@ -78,6 +78,27 @@ function describe(root, tool, input) {
 
 const unquote = (value) => value.replace(/^["']|["']$/g, '')
 
+// Claude Code's own plumbing, not the agent's work.
+const INTERNAL_TOOLS = new Set(['SubagentHandback'])
+
+/**
+ * The agent's own transcript. In a subagent, tool events carry no
+ * agent_transcript_path, only the session's transcript_path: the subagent's
+ * transcript sits next to it, in <session>/subagents/agent-<id>.jsonl.
+ */
+function transcriptOf(input) {
+  if (input.agent_transcript_path) return input.agent_transcript_path
+  const session = input.transcript_path
+  if (input.agent_id && typeof session === 'string' && session.endsWith('.jsonl')) {
+    return path.join(
+      session.slice(0, -'.jsonl'.length),
+      'subagents',
+      `agent-${input.agent_id}.jsonl`,
+    )
+  }
+  return session
+}
+
 /** Records what the transcript shows since the last step, then `step`. */
 async function record(agent, project, comment, step) {
   await appendProgress(project, comment, ...(await newTranscriptSteps(agent)), step)
@@ -186,22 +207,26 @@ async function postToolUseFailure(agent, tool, input, toolUseId, error) {
 
 const input = await readInput()
 const agent = input.agent_id ?? `session-${input.session_id}`
-// A subagent's own transcript; the main session's when the hook runs there.
-const transcript = input.agent_transcript_path ?? input.transcript_path
+const transcript = transcriptOf(input)
 const tool = input.tool_name
 const toolInput = input.tool_input ?? {}
 try {
-  if (input.hook_event_name === 'PreToolUse') {
+  if (INTERNAL_TOOLS.has(tool)) {
+    // Nothing to lock or show.
+  } else if (input.hook_event_name === 'PreToolUse') {
     await preToolUse(agent, tool, toolInput, input.tool_use_id)
   } else if (input.hook_event_name === 'PostToolUse') {
     await postToolUse(agent, tool, toolInput, input.tool_use_id, transcript)
   } else if (input.hook_event_name === 'PostToolUseFailure') {
     await postToolUseFailure(agent, tool, toolInput, input.tool_use_id, input.error)
   } else if (input.hook_event_name === 'SubagentStop' && input.agent_id) {
+    // A stopped agent holds nothing: an agent resumed for a follow-up claims
+    // its comment again. An unbound agent also lets hook.sh skip Node.
     const binding = await bindingOf(input.agent_id)
     if (binding) {
       await createLocks(loadProject(binding.root)).releaseAll(binding.comment)
     }
+    await unbind(input.agent_id)
     await forgetTranscript(input.agent_id)
   }
 } catch (error) {

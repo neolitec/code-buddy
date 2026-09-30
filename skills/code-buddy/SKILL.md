@@ -11,30 +11,6 @@ description:
   "uninstall" maintain it. Use when the user wants to give feedback on the app
   in the browser, to follow or answer that feedback, to install or remove the
   feedback widget, or says "/code-buddy" or "/code-buddy:code-buddy".
-hooks:
-  PreToolUse:
-    - matcher: '*'
-      hooks:
-        - type: command
-          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
-          timeout: 60
-  PostToolUse:
-    - matcher: '*'
-      hooks:
-        - type: command
-          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
-          timeout: 10
-  PostToolUseFailure:
-    - matcher: '*'
-      hooks:
-        - type: command
-          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
-          timeout: 10
-  SubagentStop:
-    - hooks:
-        - type: command
-          command: 'node "${CLAUDE_PLUGIN_ROOT}/skills/code-buddy/scripts/hook.mjs"'
-          timeout: 10
 ---
 
 # Code Buddy

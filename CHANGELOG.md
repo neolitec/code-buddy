@@ -15,6 +15,10 @@ released to the `stable` branch.
 
 ### Fixed
 
+- The file locks and the progress never worked in the agents: the hooks were
+  declared in the skill, and a skill's hooks do not fire in subagents. The
+  plugin now declares them, and they skip Node unless an agent works on a
+  comment.
 - A build that failed kept its build lock until the agent stopped.
 
 ## 0.1.0 - 2026-09-29

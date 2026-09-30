@@ -7,6 +7,9 @@ browser, and one background agent per comment makes the change. See the
 ## Layout
 
 - `.claude-plugin/`: plugin and marketplace manifests.
+- `hooks/hooks.json`: the plugin's hooks, which run in every session and
+  subagent (a skill's own hooks never fire in subagents). They go through
+  `scripts/hook.sh`, which skips Node unless an agent works on a comment.
 - `skills/code-buddy/SKILL.md`: the skill itself, a prompt. Keep it short:
   every line is read in every user's session.
 - `skills/code-buddy/scripts/`: Node.js ES modules with JSDoc types, no
