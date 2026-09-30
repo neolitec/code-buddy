@@ -57,14 +57,20 @@ function send(res, status, body, headers = {}) {
   res.end(json)
 }
 
-/** A request the client got wrong: its status and message are safe to send back. */
+/** What the server answers to a request the client got wrong, by status. */
+const CLIENT_ERRORS = /** @type {const} */ ({
+  400: 'invalid JSON',
+  413: 'body too large',
+})
+
+/**
+ * A request the client got wrong. The response takes its text from
+ * CLIENT_ERRORS, never from the exception: no exception text reaches a client.
+ */
 class ClientError extends Error {
-  /**
-   * @param {number} status
-   * @param {string} message
-   */
-  constructor(status, message) {
-    super(message)
+  /** @param {keyof typeof CLIENT_ERRORS} status */
+  constructor(status) {
+    super(CLIENT_ERRORS[status])
     this.status = status
   }
 }
@@ -73,12 +79,12 @@ async function readJson(req) {
   let raw = ''
   for await (const chunk of req) {
     raw += chunk
-    if (raw.length > 100_000) throw new ClientError(413, 'body too large')
+    if (raw.length > 100_000) throw new ClientError(413)
   }
   try {
     return raw ? JSON.parse(raw) : {}
   } catch {
-    throw new ClientError(400, 'invalid JSON')
+    throw new ClientError(400)
   }
 }
 
@@ -245,7 +251,7 @@ const server = http.createServer((req, res) => {
   handle(req, res).catch((error) => {
     const cors = corsHeaders(req.headers.origin)
     if (error instanceof ClientError) {
-      send(res, error.status, { error: error.message }, cors)
+      send(res, error.status, { error: CLIENT_ERRORS[error.status] }, cors)
       return
     }
     // Internal details stay in the server's log, never in a response.
