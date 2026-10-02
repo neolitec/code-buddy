@@ -44,6 +44,7 @@ import {
 } from './ui'
 import { activityOf, isOngoing, stepKey } from './activity'
 import buddy from './assets/buddy.webp'
+import buddyThinking from './assets/buddy-thinking.webp'
 
 const REPOSITORY = 'https://github.com/neolitec/code-buddy'
 
@@ -275,6 +276,10 @@ export default function App({ root }: { root: Element }) {
   const page = useComments(route)
   const comments = page.comments
   const all = useAllComments(open && view === 'all')
+  // A claimed comment still open: some agent is on it right now.
+  const working = [...comments, ...all.comments].some(
+    (comment) => isActive(comment) && !!comment.claimedAt,
+  )
   const watching = page.reachable
 
   useEffect(() => {
@@ -896,7 +901,12 @@ export default function App({ root }: { root: Element }) {
                 .map((comment) => renderSummary(comment, false))}
           </div>
           <div className="cb-buddy-slot">
-            <img className="cb-buddy" src={buddy} alt="" draggable={false} />
+            <img
+              className="cb-buddy"
+              src={working ? buddyThinking : buddy}
+              alt=""
+              draggable={false}
+            />
           </div>
           <footer className="cb-footer">
             v{CODE_BUDDY_VERSION} –{' '}
