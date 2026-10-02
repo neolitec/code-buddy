@@ -1,6 +1,4 @@
 import {
-  type FormEvent,
-  type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   Fragment,
   useCallback,
@@ -33,6 +31,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  Composer,
   type IconName,
   Icon,
   IconButton,
@@ -102,7 +101,9 @@ function StepLine({
       className={`${className}${failed ? ' cb-current-line--failed' : ''}`}
       title={step?.error}
     >
-      <Icon name={step ? (STEP_ICONS[step.kind] ?? 'wrench') : 'lightning'} />
+      <span className="cb-step-icon">
+        <Icon name={step ? (STEP_ICONS[step.kind] ?? 'wrench') : 'lightning'} />
+      </span>
       <span>{activityOf(step)}</span>
       {!failed && (
         <span className="cb-dots" aria-hidden="true">
@@ -234,14 +235,6 @@ function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
   return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
-const submitOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>, busy: boolean) => {
-  if (event.nativeEvent.isComposing) return false
-  if (event.key !== 'Enter' || event.shiftKey) return false
-  event.preventDefault()
-  if (!busy) event.currentTarget.form?.requestSubmit()
-  return true
-}
-
 export default function App({ root }: { root: Element }) {
   const route = useRoute()
   const [saved] = useState(() => readSession<UiState>(UI_KEY))
@@ -270,6 +263,12 @@ export default function App({ root }: { root: Element }) {
   const [followUp, setFollowUp] = useState<{ id: string; body: string }>()
   const [created, setCreated] = useState<ReviewComment>()
   const [busy, setBusy] = useState(false)
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
+  const [below, setBelow] = useState(false)
+  const [overflowing, setOverflowing] = useState(false)
+  const hintRow = useRef<HTMLDivElement>(null)
+  // The hint row's height with the gap above it, as last measured under the box.
+  const hintHeight = useRef(0)
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pendingAnchor = useRef<ReviewAnchor>(undefined)
 
@@ -410,8 +409,7 @@ export default function App({ root }: { root: Element }) {
     }
   }
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const save = async () => {
     if (!draft?.body.trim()) return
     const { app, ...anchor } = draft
     await run(async () => {
@@ -441,6 +439,69 @@ export default function App({ root }: { root: Element }) {
     : undefined
 
   const drafting = view === 'page' && !!draft
+  const openedId = drafting ? undefined : thread?.id
+  // The thread the message box replies to: only once Claude is done or asks.
+  const replying =
+    !drafting && thread && (thread.status === 'resolved' || isAsking(thread))
+      ? thread
+      : undefined
+  const reply = replying && followUp?.id === replying.id ? followUp.body : ''
+
+  // A conversation opens on its latest message; any other view, at its top.
+  const screen = openedId ? `thread:${openedId}` : drafting ? 'draft' : view
+  useLayoutEffect(() => {
+    if (!scroller) return
+    scroller.scrollTo({ top: screen.startsWith('thread:') ? scroller.scrollHeight : 0 })
+  }, [scroller, screen])
+
+  // Measured once per frame at most: on scroll, on resize of the body or of
+  // its end (the message box grows as the reader types), and when a message
+  // grows the content without resizing either.
+  useEffect(() => {
+    if (!scroller) return undefined
+    const check = () => {
+      setBelow(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 40)
+      const end = scroller.querySelector<HTMLElement>('.cb-body-end')
+      if (!end) return
+      const row = hintRow.current
+      const endStyle = getComputedStyle(end)
+      if (row) hintHeight.current = row.offsetHeight + parseFloat(endStyle.rowGap)
+      // Where the end of the body would sit with the hint row under the box,
+      // whether the row is there now or in the foot: measured from the content
+      // before it, as a stuck end sits wherever the scroll puts it.
+      const before = end.previousElementSibling
+      const origin = scroller.getBoundingClientRect().top - scroller.scrollTop
+      const start = before
+        ? before.getBoundingClientRect().bottom -
+          origin +
+          parseFloat(getComputedStyle(scroller).rowGap)
+        : parseFloat(getComputedStyle(scroller).paddingTop)
+      const height =
+        parseFloat(endStyle.marginTop) + end.offsetHeight + (row ? 0 : hintHeight.current)
+      setOverflowing(start + height > scroller.clientHeight)
+    }
+    let frame = 0
+    const schedule = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0
+        check()
+      })
+    }
+    check()
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    const resizes = new ResizeObserver(schedule)
+    resizes.observe(scroller)
+    const end = scroller.querySelector('.cb-body-end')
+    if (end) resizes.observe(end)
+    const mutations = new MutationObserver(schedule)
+    mutations.observe(scroller, { childList: true, subtree: true, characterData: true })
+    return () => {
+      cancelAnimationFrame(frame)
+      scroller.removeEventListener('scroll', schedule)
+      resizes.disconnect()
+      mutations.disconnect()
+    }
+  }, [scroller])
 
   // The page view lists only this page's comments: leaving a draft or a thread
   // for an empty one showed a blank panel, so fall back to the open comments.
@@ -452,6 +513,15 @@ export default function App({ root }: { root: Element }) {
       setStatusFilter('open')
     }
   }
+
+  const composing = drafting || !!replying
+  const sendHint = <span className="cb-send-hint">Enter to send</span>
+  const cancelDraft = (
+    <Button small variant="tertiary" className="cb-composer-cancel" onClick={backToList}>
+      Cancel
+    </Button>
+  )
+
   const outlined = target ?? flash
 
   const centerOn = (anchor: ReviewAnchor, id?: string) => {
@@ -519,38 +589,32 @@ export default function App({ root }: { root: Element }) {
     )
 
   const renderItem = (comment: ReviewComment) => (
-    <article
-      key={comment.id}
-      className={`cb-item ${comment.id === activeId ? 'cb-item--active' : ''}`}
-      onClick={() => !thread && jump(comment)}
-    >
+    <article key={comment.id} className="cb-item cb-discussion">
       <div className="cb-item-top">
         <div>{anchorDetails(comment)}</div>
         {deleteButton(comment)}
       </div>
-      <div className="cb-thread">
-        {threadOf(comment).map((message, index, messages) =>
+      <div className="cb-chat">
+        {threadOf(comment).map((message, index) =>
           message.author === 'claude' ? (
             // Its steps were only there to wait on it: an answer shows alone.
             // A thread only grows at its end: the index is a stable key.
             // oxlint-disable-next-line react/no-array-index-key
-            <div key={index} className="cb-answer-group">
-              <div
-                className={`cb-answer${message.question ? ' cb-answer--question' : ''}`}
-              >
-                {message.body}
-              </div>
+            <div key={index} className="cb-msg cb-msg--claude">
+              {message.question ? (
+                <div className="cb-ask">
+                  <span className="cb-ask-label">Question</span>
+                  <span>{message.body}</span>
+                </div>
+              ) : (
+                <div className="cb-bubble cb-bubble--claude">{message.body}</div>
+              )}
               <MessageTime at={message.at} />
             </div>
           ) : (
             // oxlint-disable-next-line react/no-array-index-key
-            <div key={index} className="cb-answer-group">
-              <p>
-                {messages.length > 2 && index > 0 && (
-                  <span className="cb-author">You</span>
-                )}
-                {message.body}
-              </p>
+            <div key={index} className="cb-msg cb-msg--reader">
+              <div className="cb-bubble cb-bubble--reader">{message.body}</div>
               <MessageTime at={message.at} />
             </div>
           ),
@@ -648,43 +712,6 @@ export default function App({ root }: { root: Element }) {
           )
         )}
       </div>
-      {/* A question waits on the reader wherever the thread is shown. */}
-      {((comment.status === 'resolved' && thread?.id === comment.id) ||
-        isAsking(comment)) && (
-        <form
-          className="cb-form"
-          data-testid="cb-follow-up"
-          onClick={(event) => event.stopPropagation()}
-          onSubmit={(event) => {
-            event.preventDefault()
-            const body = followUp?.id === comment.id ? followUp.body.trim() : ''
-            if (!body) return
-            void run(async () => {
-              await updateComment(comment.id, { followUp: body })
-              setFollowUp(undefined)
-            })
-          }}
-        >
-          <Textarea
-            placeholder={isAsking(comment) ? 'Answer Claude…' : 'Follow up…'}
-            value={followUp?.id === comment.id ? followUp.body : ''}
-            onChange={(event) =>
-              setFollowUp({ id: comment.id, body: event.target.value })
-            }
-            onKeyDown={(event) => submitOnEnter(event, busy)}
-          />
-          <div className="cb-actions">
-            <Button
-              small
-              type="submit"
-              icon="send"
-              disabled={busy || !(followUp?.id === comment.id && followUp.body.trim())}
-            >
-              Send
-            </Button>
-          </div>
-        </form>
-      )}
     </article>
   )
 
@@ -855,10 +882,10 @@ export default function App({ root }: { root: Element }) {
               <IconButton icon="x" label="Close" onClick={() => setOpen(false)} />
             </div>
           </header>
-          <div className="cb-body">
+          <div className="cb-body" ref={setScroller}>
             {view === 'all' && (thread ? renderItem(thread) : allCommentsView)}
             {drafting && (
-              <form className="cb-form" onSubmit={submit}>
+              <div className="cb-form">
                 {draft.section && <span className="cb-section">{draft.section}</span>}
                 {draft.quote && (
                   <blockquote className="cb-quote">{draft.quote}</blockquote>
@@ -872,25 +899,7 @@ export default function App({ root }: { root: Element }) {
                     Linked to the current page ({pagePath(window.location.href)})
                   </Checkbox>
                 )}
-                <Textarea
-                  autoFocus
-                  placeholder="What should change?"
-                  value={draft.body}
-                  onChange={(event) => setDraft({ ...draft, body: event.target.value })}
-                  onKeyDown={(event) => {
-                    if (submitOnEnter(event, busy)) return
-                    if (event.key === 'Escape' && !draft.body.trim()) backToList()
-                  }}
-                />
-                <div className="cb-actions">
-                  <Button variant="secondary" onClick={backToList}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={!draft.body.trim() || busy}>
-                    Save
-                  </Button>
-                </div>
-              </form>
+              </div>
             )}
             {view === 'page' && !drafting && thread && renderItem(thread)}
             {view === 'page' &&
@@ -899,20 +908,73 @@ export default function App({ root }: { root: Element }) {
               comments
                 .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
                 .map((comment) => renderSummary(comment, false))}
+            {/* The end of the body: the message box follows the content, and
+                sticks to the panel's bottom once the content overflows. */}
+            <div className="cb-body-end">
+              {below && openedId && (
+                <button
+                  type="button"
+                  className="cb-scroll-down"
+                  aria-label="Scroll to the latest message"
+                  title="Scroll to the latest message"
+                  onClick={() =>
+                    scroller?.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+                  }
+                >
+                  <Icon name="chevron-down" />
+                </button>
+              )}
+              {drafting && (
+                <Composer
+                  autoFocus
+                  value={draft.body}
+                  placeholder="What should change?"
+                  sendLabel="Save"
+                  disabled={busy}
+                  onChange={(body) => setDraft({ ...draft, body })}
+                  onSubmit={() => void save()}
+                  onEscape={() => !draft.body.trim() && backToList()}
+                />
+              )}
+              {replying && (
+                <Composer
+                  value={reply}
+                  placeholder={
+                    isAsking(replying)
+                      ? 'Answer Claude…'
+                      : 'Follow up, clarify, ask for a change…'
+                  }
+                  disabled={busy}
+                  onChange={(value) => setFollowUp({ id: replying.id, body: value })}
+                  onSubmit={() =>
+                    void run(async () => {
+                      await updateComment(replying.id, { followUp: reply.trim() })
+                      setFollowUp(undefined)
+                    })
+                  }
+                />
+              )}
+              {composing && !overflowing && (
+                <div className="cb-composer-foot" ref={hintRow}>
+                  {drafting ? cancelDraft : <span />}
+                  {sendHint}
+                </div>
+              )}
+            </div>
           </div>
-          <div className="cb-buddy-slot">
-            <img
-              className="cb-buddy"
-              src={working ? buddyThinking : buddy}
-              alt=""
-              draggable={false}
-            />
-          </div>
-          <footer className="cb-footer">
-            v{CODE_BUDDY_VERSION} –{' '}
-            <a href={REPOSITORY} target="_blank" rel="noopener noreferrer">
-              Code Buddy
-            </a>
+          <footer className="cb-panel-foot">
+            <span className="cb-composer-brand">
+              <img src={working ? buddyThinking : buddy} alt="" draggable={false} />
+              <a href={REPOSITORY} target="_blank" rel="noopener noreferrer">
+                Code Buddy v{CODE_BUDDY_VERSION}
+              </a>
+            </span>
+            {composing && overflowing && (
+              <span className="cb-panel-foot-hint">
+                {drafting && cancelDraft}
+                {sendHint}
+              </span>
+            )}
           </footer>
         </section>
       )}

@@ -1,3 +1,6 @@
+import figtree from './assets/fonts/figtree-latin.woff2'
+import figtreeItalic from './assets/fonts/figtree-latin-italic.woff2'
+
 /** Styles of the widget, scoped by its shadow root. */
 export const WIDGET_CSS = `
 :host {
@@ -23,9 +26,14 @@ export const WIDGET_CSS = `
   --cb-red-bg: #fdecec;
   --cb-yellow: #f0ad2e;
   --cb-yellow-dark: #b7791f;
+  --cb-amber-bg: #fdf3e1;
+  --cb-amber-fg: #7a4e0e;
+  --cb-amber-ink: #4a2f06;
+  --cb-amber-border: #f2d9a8;
+  --cb-bubble: #eff3f8;
   --cb-radius: 8px;
   --cb-shadow: 0 8px 32px rgba(16, 36, 74, 0.18);
-  --cb-font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cb-font: 'Code Buddy Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --cb-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 * { box-sizing: border-box; }
@@ -102,29 +110,36 @@ code { font-family: var(--cb-mono); }
 .cb-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .cb-title h2 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-header-actions { display: flex; align-items: center; gap: 2px; }
-.cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; }
-/* The mascot has its own strip below the body rather than floating over it: in a short panel, padding
-   alone left it covering whatever the body showed. Its height leaves room for the drift, which never clips. */
-.cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; pointer-events: none; user-select: none; }
-.cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); animation: cb-float 4.8s ease-in-out infinite; }
-/* On a short screen the chat needs the room more than the mascot does. */
-@media (max-height: 560px) {
-  .cb-buddy-slot { display: none; }
-  /* Without the strip, the footer sits over the body's end: keep it clear. */
-  .cb-body { padding-bottom: 36px; }
-}
-/* Version and project link, in the panel's bottom-right corner. */
-.cb-footer { position: absolute; right: 16px; bottom: 12px; font-size: 11px; color: var(--cb-muted); }
-.cb-footer a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.cb-footer a:hover { color: var(--cb-accent); }
-/* A slow drift, bob and tilt; translateX(-50%) is restated in every frame because the animation owns transform. */
-@keyframes cb-float {
-  0%, 100% { transform: translateX(-50%) translateY(0) rotate(-3deg); }
-  25% { transform: translateX(calc(-50% + 10px)) translateY(-10px) rotate(2deg); }
-  50% { transform: translateX(-50%) translateY(-4px) rotate(3deg); }
-  75% { transform: translateX(calc(-50% - 10px)) translateY(-12px) rotate(-1deg); }
-}
-@media (prefers-reduced-motion: reduce) { .cb-buddy { animation: none; } }
+.cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 0; }
+/* Closes the body: the message box right after the content, stuck to the bottom once the content
+   overflows. It carries the body's bottom padding, so nothing scrolls visibly beneath it. */
+.cb-body-end { position: sticky; bottom: 0; z-index: 3; display: flex; flex-direction: column; gap: 10px; margin-top: -6px; padding: 6px 0 20px; background: var(--cb-surface); }
+/* The mascot, version and project link, pinned at the panel's foot. */
+.cb-panel-foot { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 20px 12px; border-top: 1px solid var(--cb-border); font-size: 13px; color: var(--cb-muted); }
+.cb-composer-box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--cb-border); border-radius: 12px; background: var(--cb-surface); transition: border-color .15s; }
+.cb-composer-box:focus-within { border-color: var(--cb-accent); }
+.cb-composer-box textarea { flex: 1; min-width: 0; min-height: 36px; max-height: 160px; padding: 7px 0; border: 0; outline: none; resize: none; overflow-y: auto; background: transparent; font-size: 15px; line-height: 1.45; }
+.cb-composer-box textarea::placeholder { color: #7d8ba0; }
+.cb-send { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: var(--cb-accent); color: #fff; cursor: pointer; transition: background .15s; }
+.cb-send:hover { background: var(--cb-accent-strong); }
+.cb-send:disabled { cursor: default; background: var(--cb-accent-weak); color: #9cbfde; }
+.cb-send svg { width: 18px; height: 18px; }
+.cb-composer-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--cb-muted); }
+.cb-composer-cancel { margin-left: -10px; }
+/* The hint row, moved into the foot while the content overflows. */
+.cb-panel-foot-hint { display: inline-flex; align-items: center; gap: 12px; }
+.cb-panel-foot-hint .cb-composer-cancel { margin-left: 0; }
+/* Away from its box, the hint would only be noise: shown while the box has the focus. */
+.cb-panel:not(:has(.cb-composer-box:focus-within)) .cb-panel-foot-hint .cb-send-hint { visibility: hidden; }
+.cb-composer-brand { display: inline-flex; align-items: center; gap: 8px; }
+/* The mascot's head: the image is cropped to its top. */
+.cb-composer-brand img { width: 18px; height: 22px; object-fit: cover; object-position: 50% 0; }
+.cb-composer-brand a { color: inherit; text-decoration: none; }
+.cb-composer-brand a:hover { color: var(--cb-accent); }
+/* Shown until the reader reaches the end of the body, just above the message box. */
+.cb-scroll-down { position: absolute; bottom: calc(100% + 8px); left: 50%; margin-left: -14px; width: 28px; height: 28px; padding: 0; border-radius: 999px; border: 1px solid var(--cb-border); background: var(--cb-surface); color: var(--cb-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: .75; transition: opacity .15s, color .15s, border-color .15s, box-shadow .15s; }
+.cb-scroll-down:hover { opacity: 1; color: var(--cb-text); border-color: var(--cb-accent); box-shadow: 0 4px 16px rgba(0,0,0,.15); }
+.cb-scroll-down svg { width: 16px; height: 16px; }
 .cb-form { display: flex; flex-direction: column; gap: 8px; }
 .cb-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .cb-empty { display: flex; justify-content: center; padding: 32px 0; }
@@ -152,25 +167,39 @@ code { font-family: var(--cb-mono); }
 .cb-page span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-page svg { width: 14px; height: 14px; flex-shrink: 0; }
 
-.cb-thread { display: flex; flex-direction: column; gap: 8px; }
-.cb-answer { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-green-bg); color: var(--cb-green); font-size: 13px; white-space: pre-wrap; }
-.cb-answer--question { background: #fdf3e1; color: #7a4e0e; }
-.cb-answer-group { display: flex; flex-direction: column; gap: 2px; }
-.cb-message-time { align-self: flex-end; font-size: 11px; color: var(--cb-muted); font-variant-numeric: tabular-nums; }
+/* The open discussion fills the body: no card around it. */
+.cb-discussion { padding: 0; border: none; cursor: default; }
+/* The thread as a chat: the reader's messages right, in the accent; Claude's left, in a tint. */
+.cb-chat { display: flex; flex-direction: column; gap: 16px; }
+.cb-msg { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cb-msg--reader { align-items: flex-end; padding-left: 40px; }
+.cb-msg--claude { align-items: flex-start; }
+/* Long words, URLs and code break inside the bubble rather than spilling out of it. */
+.cb-bubble { max-width: 100%; padding: 8px 14px; border-radius: 14px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cb-bubble--reader { background: var(--cb-accent); color: #fff; border-bottom-right-radius: 4px; }
+.cb-bubble--claude { width: 100%; background: var(--cb-bubble); color: var(--cb-text); }
+.cb-ask { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--cb-amber-border); border-radius: 14px; background: var(--cb-amber-bg); color: var(--cb-amber-ink); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cb-ask-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--cb-amber-fg); }
+.cb-message-time { font-size: 11px; color: var(--cb-muted); font-variant-numeric: tabular-nums; }
 .cb-working { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--cb-accent); }
 .cb-working span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* One line, the latest step: the previous one leaves right, the new one enters left. */
-.cb-current { position: relative; overflow: hidden; font-size: 13px; color: var(--cb-accent); }
-.cb-current-line { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cb-current { position: relative; overflow: hidden; padding: 8px 10px; border-radius: var(--cb-radius); background: var(--cb-accent-weak); color: var(--cb-accent-strong); font-size: 13px; font-weight: 600; }
+.cb-current:has(.cb-current-line--failed) { background: var(--cb-red-bg); }
+.cb-current-line { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .cb-current-line > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cb-current-line svg { width: 14px; height: 14px; flex-shrink: 0; }
 .cb-current-line--failed { color: var(--cb-red); }
-.cb-current-line--out { position: absolute; inset: 0; animation: cb-slide-out .25s ease-in forwards; }
+/* The running step's icon: filled, with a pulsing ring. */
+.cb-step-icon { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--cb-accent); color: #fff; animation: cb-pulse 1.6s ease-out infinite; }
+.cb-current-line--failed .cb-step-icon { background: var(--cb-red); animation: none; }
+@keyframes cb-pulse { 0% { box-shadow: 0 0 0 0 rgba(var(--cb-accent-rgb), .45); } 70%, 100% { box-shadow: 0 0 0 7px rgba(var(--cb-accent-rgb), 0); } }
+.cb-current-line--out { position: absolute; inset: 8px 10px; animation: cb-slide-out .25s ease-in forwards; }
 .cb-current-line--in { animation: cb-slide-in .25s ease-out; }
 @keyframes cb-slide-out { to { transform: translateX(100%); opacity: 0; } }
 @keyframes cb-slide-in { from { transform: translateX(-100%); opacity: 0; } }
 /* One dot, then two, then three. */
-.cb-dots { flex-shrink: 0; margin-left: -6px; }
+.cb-dots { flex-shrink: 0; margin-left: -8px; }
 .cb-dots i { font-style: normal; }
 .cb-dots i:nth-child(2) { animation: cb-dot-2 1.2s steps(1) infinite; }
 .cb-dots i:nth-child(3) { animation: cb-dot-3 1.2s steps(1) infinite; }
@@ -178,7 +207,7 @@ code { font-family: var(--cb-mono); }
 @keyframes cb-dot-3 { 0% { opacity: 0; } 66.6% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .cb-current-line--out { display: none; }
-  .cb-current-line--in, .cb-dots i { animation: none; }
+  .cb-current-line--in, .cb-dots i, .cb-step-icon { animation: none; }
 }
 .cb-stopped { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-red-bg); color: var(--cb-red); font-size: 13px; }
 .cb-stopped code { overflow-wrap: anywhere; }
@@ -201,8 +230,15 @@ code { font-family: var(--cb-mono); }
 .cb-toast--error { background: var(--cb-red); }
 `
 
-/** Page-level styles: text highlights live in the page's own document. */
+/**
+ * Page-level styles: text highlights live in the page's own document, and so do
+ * fonts, which a shadow root ignores. Figtree ships with the widget (latin, the
+ * variable weights and the italic), under its own name so a page's Figtree is
+ * left alone.
+ */
 export const PAGE_CSS = `
+@font-face { font-family: 'Code Buddy Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(${figtree}) format('woff2'); }
+@font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
 ::highlight(code-buddy) { background-color: rgba(255, 213, 79, 0.45); }
 ::highlight(code-buddy-active) { background-color: rgba(255, 152, 0, 0.55); }
 `

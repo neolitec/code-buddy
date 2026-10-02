@@ -1,8 +1,11 @@
 import {
   type ButtonHTMLAttributes,
+  type FormEvent,
   type ReactNode,
   type TextareaHTMLAttributes,
   forwardRef,
+  useLayoutEffect,
+  useRef,
   useSyncExternalStore,
 } from 'react'
 
@@ -29,6 +32,8 @@ const PATHS = {
   lightning: 'M13 3L5 14h6l-1 7 8-11h-6z',
   bulb: 'M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z',
   wrench: 'M14 6a4 4 0 0 0-5 5l-5 5 4 4 5-5a4 4 0 0 0 5-5l-3 3-3-3z',
+  'arrow-up': 'M12 19V5M6 11l6-6 6 6',
+  'chevron-down': 'M6 9l6 6 6-6',
 } as const
 
 export type IconName = keyof typeof PATHS
@@ -146,6 +151,71 @@ export const Textarea = forwardRef<
 >(function Textarea({ className = '', ...props }, ref) {
   return <textarea ref={ref} className={`cb-textarea ${className}`} {...props} />
 })
+
+/** The message box at the panel's foot: Enter sends, Shift+Enter breaks the line. */
+export function Composer({
+  value,
+  placeholder,
+  disabled,
+  autoFocus,
+  sendLabel = 'Send',
+  onChange,
+  onSubmit,
+  onEscape,
+}: {
+  value: string
+  placeholder: string
+  disabled: boolean
+  autoFocus?: boolean
+  sendLabel?: string
+  onChange: (value: string) => void
+  onSubmit: () => void
+  onEscape?: () => void
+}) {
+  const box = useRef<HTMLTextAreaElement>(null)
+  // Grows with its text up to the CSS max-height, then scrolls.
+  useLayoutEffect(() => {
+    const textarea = box.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    // Empty, it keeps the CSS height: one line.
+    if (value) textarea.style.height = `${textarea.scrollHeight}px`
+  }, [value])
+  const blocked = disabled || !value.trim()
+  const submit = (event: FormEvent) => {
+    event.preventDefault()
+    if (!blocked) onSubmit()
+  }
+  return (
+    <form className="cb-composer-box" onSubmit={submit}>
+      <textarea
+        ref={box}
+        rows={1}
+        value={value}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        autoFocus={autoFocus}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return
+          if (event.key === 'Escape') return onEscape?.()
+          if (event.key !== 'Enter' || event.shiftKey) return
+          event.preventDefault()
+          event.currentTarget.form?.requestSubmit()
+        }}
+      />
+      <button
+        type="submit"
+        className="cb-send"
+        aria-label={sendLabel}
+        title={sendLabel}
+        disabled={blocked}
+      >
+        <Icon name="arrow-up" />
+      </button>
+    </form>
+  )
+}
 
 export function Checkbox({
   checked,
