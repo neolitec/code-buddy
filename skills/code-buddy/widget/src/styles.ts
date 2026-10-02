@@ -102,16 +102,16 @@ code { font-family: var(--cb-mono); }
 .cb-title { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .cb-title h2 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cb-header-actions { display: flex; align-items: center; gap: 2px; }
-.cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px; }
-/* The mascot has its own strip below the body rather than floating over it: in a short panel, padding
-   alone left it covering whatever the body showed. Its height leaves room for the drift, which never clips. */
-.cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; pointer-events: none; user-select: none; }
-.cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); animation: cb-float 4.8s ease-in-out infinite; }
-/* On a short screen the chat needs the room more than the mascot does. */
+.cb-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding: 20px 20px 0; }
+/* The mascot and the footer close the scroll rather than floating over it: a long thread scrolls with
+   them out of sight, and they show at its end. margin-top: auto holds them to the panel's bottom when the
+   body is short. The strip spans the body's padding; its height leaves room for the drift, which never clips. */
+.cb-buddy-slot { flex-shrink: 0; position: relative; height: 128px; margin: auto -20px 0; user-select: none; }
+.cb-buddy { position: absolute; bottom: 12px; left: 50%; height: 96px; transform: translateX(-50%); pointer-events: none; animation: cb-float 4.8s ease-in-out infinite; }
+/* On a short screen the chat needs the room more than the mascot does: keep only the footer. */
 @media (max-height: 560px) {
-  .cb-buddy-slot { display: none; }
-  /* Without the strip, the footer sits over the body's end: keep it clear. */
-  .cb-body { padding-bottom: 36px; }
+  .cb-buddy-slot { height: 36px; }
+  .cb-buddy { display: none; }
 }
 /* Version and project link, in the panel's bottom-right corner. */
 .cb-footer { position: absolute; right: 16px; bottom: 12px; font-size: 11px; color: var(--cb-muted); }
@@ -152,8 +152,12 @@ code { font-family: var(--cb-mono); }
 .cb-page span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-page svg { width: 14px; height: 14px; flex-shrink: 0; }
 
+/* The open discussion fills the body: no card around it. */
+.cb-discussion { padding: 0; border: none; cursor: default; }
 .cb-thread { display: flex; flex-direction: column; gap: 8px; }
-.cb-answer { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-green-bg); color: var(--cb-green); font-size: 13px; white-space: pre-wrap; }
+/* Long words, URLs and code break inside the message rather than spilling out of it. */
+.cb-thread p, .cb-answer { overflow-wrap: anywhere; }
+.cb-answer { padding: 8px 12px; border-radius: var(--cb-radius); background: var(--cb-accent-weak); color: var(--cb-text); font-size: 13px; white-space: pre-wrap; }
 .cb-answer--question { background: #fdf3e1; color: #7a4e0e; }
 .cb-answer-group { display: flex; flex-direction: column; gap: 2px; }
 .cb-message-time { align-self: flex-end; font-size: 11px; color: var(--cb-muted); font-variant-numeric: tabular-nums; }

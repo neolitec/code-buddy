@@ -516,7 +516,7 @@ export default function App({ root }: { root: Element }) {
   const renderItem = (comment: ReviewComment) => (
     <article
       key={comment.id}
-      className={`cb-item ${comment.id === activeId ? 'cb-item--active' : ''}`}
+      className="cb-item cb-discussion"
       onClick={() => !thread && jump(comment)}
     >
       <div className="cb-item-top">
@@ -894,16 +894,16 @@ export default function App({ root }: { root: Element }) {
               comments
                 .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
                 .map((comment) => renderSummary(comment, false))}
+            <div className="cb-buddy-slot">
+              <img className="cb-buddy" src={buddy} alt="" draggable={false} />
+              <footer className="cb-footer">
+                v{CODE_BUDDY_VERSION} –{' '}
+                <a href={REPOSITORY} target="_blank" rel="noopener noreferrer">
+                  Code Buddy
+                </a>
+              </footer>
+            </div>
           </div>
-          <div className="cb-buddy-slot">
-            <img className="cb-buddy" src={buddy} alt="" draggable={false} />
-          </div>
-          <footer className="cb-footer">
-            v{CODE_BUDDY_VERSION} –{' '}
-            <a href={REPOSITORY} target="_blank" rel="noopener noreferrer">
-              Code Buddy
-            </a>
-          </footer>
         </section>
       )}
       <Toasts />
