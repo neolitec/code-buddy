@@ -86,8 +86,6 @@ const STEP_ICONS: Record<string, IconName> = {
 }
 
 const SLIDE_MS = 250
-// The hint row under the message box (a small button, 28px) and the gap above it, rounded up.
-const HINT_ROW = 40
 
 function StepLine({
   step,
@@ -267,6 +265,9 @@ export default function App({ root }: { root: Element }) {
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
   const [below, setBelow] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
+  const hintRow = useRef<HTMLDivElement>(null)
+  // The hint row's height with the gap above it, as last measured under the box.
+  const hintHeight = useRef(0)
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pendingAnchor = useRef<ReviewAnchor>(undefined)
 
@@ -433,35 +434,65 @@ export default function App({ root }: { root: Element }) {
     : undefined
 
   const drafting = view === 'page' && !!draft
-  // The thread the composer replies to; Claude must be done or asking first.
-  const replying = drafting ? undefined : thread
-  const canReply = !!replying && (replying.status === 'resolved' || isAsking(replying))
-
-  // A conversation opens on its latest message.
   const openedId = drafting ? undefined : thread?.id
-  useLayoutEffect(() => {
-    if (scroller && openedId) scroller.scrollTo({ top: scroller.scrollHeight })
-  }, [scroller, openedId])
+  // The thread the message box replies to: only once Claude is done or asks.
+  const replying =
+    !drafting && thread && (thread.status === 'resolved' || isAsking(thread))
+      ? thread
+      : undefined
+  const reply = replying && followUp?.id === replying.id ? followUp.body : ''
 
-  // More of the body below the fold: offer to jump to its end. A new message
-  // grows the content without resizing the body, so mutations count too.
+  // A conversation opens on its latest message; any other view, at its top.
+  const screen = openedId ? `thread:${openedId}` : drafting ? 'draft' : view
+  useLayoutEffect(() => {
+    if (!scroller) return
+    scroller.scrollTo({ top: screen.startsWith('thread:') ? scroller.scrollHeight : 0 })
+  }, [scroller, screen])
+
+  // Measured once per frame at most: on scroll, on resize of the body or of
+  // its end (the message box grows as the reader types), and when a message
+  // grows the content without resizing either.
   useEffect(() => {
     if (!scroller) return undefined
     const check = () => {
-      const overflow = scroller.scrollHeight - scroller.clientHeight
-      setBelow(overflow - scroller.scrollTop > 40)
-      // Once the content overflows, the hint row moves to the foot and frees
-      // its height: it comes back only if the content fits with it too.
-      setOverflowing((was) => (was ? overflow + HINT_ROW > 0 : overflow > 0))
+      setBelow(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 40)
+      const end = scroller.querySelector<HTMLElement>('.cb-body-end')
+      if (!end) return
+      const row = hintRow.current
+      const endStyle = getComputedStyle(end)
+      if (row) hintHeight.current = row.offsetHeight + parseFloat(endStyle.rowGap)
+      // Where the end of the body would sit with the hint row under the box,
+      // whether the row is there now or in the foot: measured from the content
+      // before it, as a stuck end sits wherever the scroll puts it.
+      const before = end.previousElementSibling
+      const origin = scroller.getBoundingClientRect().top - scroller.scrollTop
+      const start = before
+        ? before.getBoundingClientRect().bottom -
+          origin +
+          parseFloat(getComputedStyle(scroller).rowGap)
+        : parseFloat(getComputedStyle(scroller).paddingTop)
+      const height =
+        parseFloat(endStyle.marginTop) + end.offsetHeight + (row ? 0 : hintHeight.current)
+      setOverflowing(start + height > scroller.clientHeight)
+    }
+    let frame = 0
+    const schedule = () => {
+      frame ||= requestAnimationFrame(() => {
+        frame = 0
+        check()
+      })
     }
     check()
-    scroller.addEventListener('scroll', check, { passive: true })
-    const resizes = new ResizeObserver(check)
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    const resizes = new ResizeObserver(schedule)
     resizes.observe(scroller)
-    const mutations = new MutationObserver(check)
+    const end = scroller.querySelector('.cb-body-end')
+    if (end) resizes.observe(end)
+    const mutations = new MutationObserver(schedule)
     mutations.observe(scroller, { childList: true, subtree: true, characterData: true })
     return () => {
-      scroller.removeEventListener('scroll', check)
+      cancelAnimationFrame(frame)
+      scroller.removeEventListener('scroll', schedule)
       resizes.disconnect()
       mutations.disconnect()
     }
@@ -553,11 +584,7 @@ export default function App({ root }: { root: Element }) {
     )
 
   const renderItem = (comment: ReviewComment) => (
-    <article
-      key={comment.id}
-      className="cb-item cb-discussion"
-      onClick={() => !thread && jump(comment)}
-    >
+    <article key={comment.id} className="cb-item cb-discussion">
       <div className="cb-item-top">
         <div>{anchorDetails(comment)}</div>
         {deleteButton(comment)}
@@ -879,7 +906,7 @@ export default function App({ root }: { root: Element }) {
             {/* The end of the body: the message box follows the content, and
                 sticks to the panel's bottom once the content overflows. */}
             <div className="cb-body-end">
-              {below && (
+              {below && openedId && (
                 <button
                   type="button"
                   className="cb-scroll-down"
@@ -906,26 +933,24 @@ export default function App({ root }: { root: Element }) {
               )}
               {replying && (
                 <Composer
-                  value={followUp?.id === replying.id ? followUp.body : ''}
+                  value={reply}
                   placeholder={
                     isAsking(replying)
                       ? 'Answer Claude…'
                       : 'Follow up, clarify, ask for a change…'
                   }
-                  disabled={busy || !canReply}
+                  disabled={busy}
                   onChange={(value) => setFollowUp({ id: replying.id, body: value })}
-                  onSubmit={() => {
-                    const text = followUp?.id === replying.id ? followUp.body.trim() : ''
-                    if (!text) return
+                  onSubmit={() =>
                     void run(async () => {
-                      await updateComment(replying.id, { followUp: text })
+                      await updateComment(replying.id, { followUp: reply.trim() })
                       setFollowUp(undefined)
                     })
-                  }}
+                  }
                 />
               )}
               {composing && !overflowing && (
-                <div className="cb-composer-foot">
+                <div className="cb-composer-foot" ref={hintRow}>
                   {drafting ? cancelDraft : <span />}
                   {sendHint}
                 </div>

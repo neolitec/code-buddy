@@ -1,3 +1,6 @@
+import figtree from './assets/fonts/figtree-latin.woff2'
+import figtreeItalic from './assets/fonts/figtree-latin-italic.woff2'
+
 /** Styles of the widget, scoped by its shadow root. */
 export const WIDGET_CSS = `
 :host {
@@ -30,7 +33,7 @@ export const WIDGET_CSS = `
   --cb-bubble: #eff3f8;
   --cb-radius: 8px;
   --cb-shadow: 0 8px 32px rgba(16, 36, 74, 0.18);
-  --cb-font: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cb-font: 'Code Buddy Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --cb-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 * { box-sizing: border-box; }
@@ -115,7 +118,7 @@ code { font-family: var(--cb-mono); }
 .cb-panel-foot { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 20px 12px; border-top: 1px solid var(--cb-border); font-size: 13px; color: var(--cb-muted); }
 .cb-composer-box { display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 12px; border: 1px solid var(--cb-border); border-radius: 12px; background: var(--cb-surface); transition: border-color .15s; }
 .cb-composer-box:focus-within { border-color: var(--cb-accent); }
-.cb-composer-box textarea { flex: 1; min-width: 0; min-height: 36px; max-height: 160px; padding: 7px 0; border: 0; outline: none; resize: none; background: transparent; font-size: 15px; line-height: 1.45; field-sizing: content; }
+.cb-composer-box textarea { flex: 1; min-width: 0; min-height: 36px; max-height: 160px; padding: 7px 0; border: 0; outline: none; resize: none; overflow-y: auto; background: transparent; font-size: 15px; line-height: 1.45; }
 .cb-composer-box textarea::placeholder { color: #7d8ba0; }
 .cb-send { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: var(--cb-accent); color: #fff; cursor: pointer; transition: background .15s; }
 .cb-send:hover { background: var(--cb-accent-strong); }
@@ -227,8 +230,15 @@ code { font-family: var(--cb-mono); }
 .cb-toast--error { background: var(--cb-red); }
 `
 
-/** Page-level styles: text highlights live in the page's own document. */
+/**
+ * Page-level styles: text highlights live in the page's own document, and so do
+ * fonts, which a shadow root ignores. Figtree ships with the widget (latin, the
+ * variable weights and the italic), under its own name so a page's Figtree is
+ * left alone.
+ */
 export const PAGE_CSS = `
+@font-face { font-family: 'Code Buddy Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(${figtree}) format('woff2'); }
+@font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
 ::highlight(code-buddy) { background-color: rgba(255, 213, 79, 0.45); }
 ::highlight(code-buddy-active) { background-color: rgba(255, 152, 0, 0.55); }
 `

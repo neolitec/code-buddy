@@ -4,6 +4,8 @@ import {
   type ReactNode,
   type TextareaHTMLAttributes,
   forwardRef,
+  useLayoutEffect,
+  useRef,
   useSyncExternalStore,
 } from 'react'
 
@@ -170,6 +172,15 @@ export function Composer({
   onSubmit: () => void
   onEscape?: () => void
 }) {
+  const box = useRef<HTMLTextAreaElement>(null)
+  // Grows with its text up to the CSS max-height, then scrolls.
+  useLayoutEffect(() => {
+    const textarea = box.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    // Empty, it keeps the CSS height: one line.
+    if (value) textarea.style.height = `${textarea.scrollHeight}px`
+  }, [value])
   const blocked = disabled || !value.trim()
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -178,6 +189,7 @@ export function Composer({
   return (
     <form className="cb-composer-box" onSubmit={submit}>
       <textarea
+        ref={box}
         rows={1}
         value={value}
         placeholder={placeholder}

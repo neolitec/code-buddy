@@ -6,5 +6,11 @@ declare module '*.webp' {
   export default src
 }
 
+declare module '*.woff2' {
+  /** A data URL: the build inlines fonts. */
+  const src: string
+  export default src
+}
+
 /** The plugin's version, read from .claude-plugin/plugin.json at build time. */
 declare const CODE_BUDDY_VERSION: string

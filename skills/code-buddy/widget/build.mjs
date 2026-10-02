@@ -14,8 +14,8 @@ const result = await build({
   format: 'esm',
   target: 'es2022',
   jsx: 'automatic',
-  // Small images are inlined: the widget stays a single file.
-  loader: { '.webp': 'dataurl' },
+  // Small images and the font are inlined: the widget stays a single file.
+  loader: { '.webp': 'dataurl', '.woff2': 'dataurl' },
   minify: true,
   // Keep the bundled dependencies' license notices (React is MIT): at the end of the file.
   legalComments: 'eof',
@@ -45,9 +45,12 @@ const notices = [...packageDirs]
     const text = readFileSync(path.join(dir, licenseFile), 'utf8').trim()
     return `${pkg.name} ${pkg.version} (${pkg.license})\n\n${text}\n`
   })
+// The font is vendored, not a package: its license sits next to it.
+const ofl = readFileSync('src/assets/fonts/OFL.txt', 'utf8').trim()
+notices.push(`Figtree (OFL-1.1)\n\n${ofl}\n`)
 writeFileSync(
   'dist/THIRD_PARTY_LICENSES.txt',
-  `The Code Buddy widget (widget.js) bundles the following packages.\n\n${notices.join(
+  `The Code Buddy widget (widget.js) bundles the following packages and font.\n\n${notices.join(
     `\n${'-'.repeat(80)}\n\n`,
   )}`,
 )

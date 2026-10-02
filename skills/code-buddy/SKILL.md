@@ -179,7 +179,8 @@ answer to the same subagent.
    is removed from production builds. When the server is not running, the
    browser logs one failed request per page load; that is expected.
 6. When `cspFiles` is not empty, check the dev policy allows
-   `script-src` and `connect-src` `http://127.0.0.1:<port>`. Propose a
+   `script-src` and `connect-src` `http://127.0.0.1:<port>`, and
+   `font-src data:` (else the widget falls back to system fonts). Propose a
    dev-only change; never loosen the production policy.
 7. Add `.code-buddy/` to `.gitignore` if the user agreed.
 8. Prove the widget stays out of production: run `build`, then
