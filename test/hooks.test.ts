@@ -3,7 +3,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-const ROOT = '/p'
+const ROOT = '/repo/web'
 const SCRIPTS = '/s/scripts'
 const claim = (id: string) => `node ${SCRIPTS}/claim.mjs ${id} --project ${ROOT}`
 const resolveCmd = (id: string) =>
@@ -12,7 +12,8 @@ const resolveCmd = (id: string) =>
 type Comment = { id: string; status: string; cancelledAt?: string; askedAt?: string }
 
 /** The disk, processes and tools beneath the mod, in memory. */
-function world(on: On, comments: Comment[]) {
+/** `gitRoot`: the repository the project is in, as `git rev-parse` answers. */
+function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = {}) {
   const files = new Map<string, string>([
     [
       `${ROOT}/.code-buddy.json`,
@@ -31,6 +32,17 @@ function world(on: On, comments: Comment[]) {
     return { value: undefined }
   })
   on('process.run', (_$, e) => {
+    if (e.argv.includes('--show-toplevel')) {
+      return {
+        value: {
+          exitCode: gitRoot ? 0 : 128,
+          stdout: gitRoot ? `${gitRoot}\n` : '',
+          stderr: gitRoot ? '' : 'fatal: not a git repository',
+          isStdoutTruncated: false,
+          isStderrTruncated: false,
+        },
+      }
+    }
     if (e.argv[0] === 'rm') {
       const file = e.argv[e.argv.length - 1] ?? ''
       removed.push(file)
@@ -217,4 +229,28 @@ test('leaves Bash alone for an agent that claimed no comment', async ($, on) => 
   expect(
     (await $.tool.call(bash('free', `sed -i '' 's/a/b/' a.ts`))).deny,
   ).toBeUndefined()
+})
+
+test('locks files across the git repository, outside the project too', async ($, on) => {
+  const w = world(
+    on,
+    [
+      { id: 'c1', status: 'open' },
+      { id: 'c2', status: 'open' },
+    ],
+    { gitRoot: '/repo' },
+  )
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(bash('a2', claim('c2')))
+  expect((await $.tool.call(edit('a1', '/repo/ssd_scanner/x.py'))).deny).toBeUndefined()
+  expect(w.progress('c1').at(-1)).toEqual(
+    expect.objectContaining({ kind: 'edit', label: '../ssd_scanner/x.py' }),
+  )
+
+  const blocked = $.tool.call(edit('a2', '/repo/ssd_scanner/x.py'))
+  for (let i = 0; i < 40; i++) await w.clock.advance(200)
+  const ran = await blocked
+  expect(ran.deny ?? ran.text).toMatch(
+    /ssd_scanner\/x\.py is being changed by the agent of comment c1/,
+  )
 })

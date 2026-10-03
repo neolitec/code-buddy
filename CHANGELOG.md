@@ -29,6 +29,9 @@ released to the `stable` branch.
 
 ### Fixed
 
+- Files outside the project (an `editable` folder such as `../api`) were
+  never locked: the locks now cover the whole git repository the project is
+  in, and the widget shows those files as `../api/…`.
 - An agent could write files from Bash (`sed -i`, an inline Python or Node
   script, `cat >`, `tee`), where no lock covers them: agents edited the same
   file at once. The hooks now refuse those commands to an agent working on a

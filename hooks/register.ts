@@ -13,7 +13,17 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Binding, Lock } from '../types'
 
 type $ = EngineInterface
-type Project = { root: string; commentsFile: string; progressDir: string }
+/**
+ * `lockRoot`: the git repository the project is in, else the project. Agents
+ * may edit outside the project (`editable` folders such as `../api`), and
+ * those files need locks too.
+ */
+type Project = {
+  root: string
+  lockRoot: string
+  commentsFile: string
+  progressDir: string
+}
 type Step = Record<string, unknown>
 
 const noBindings: Record<string, Binding> = {}
@@ -65,6 +75,14 @@ const relative = (root: string, file: string) =>
       ? file.slice(root.length + 1)
       : undefined
 const basename = (file: string) => file.slice(file.lastIndexOf('/') + 1)
+/** `file` as seen from `root`, `../` included. */
+function relativeFrom(root: string, file: string) {
+  const from = root.split('/').filter(Boolean)
+  const to = file.split('/').filter(Boolean)
+  let shared = 0
+  while (shared < from.length && from[shared] === to[shared]) shared++
+  return [...from.slice(shared).map(() => '..'), ...to.slice(shared)].join('/')
+}
 const unquote = (value: string) => value.replace(/^["']|["']$/g, '')
 const short = (text: string, max = 80) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text
@@ -89,8 +107,13 @@ async function loadProjectOnce($: $, root: string): Promise<Project> {
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('')
     .slice(0, 12)
+  const git = await $.process
+    .run(['git', '-C', root, 'rev-parse', '--show-toplevel'])
+    .catch(() => undefined)
+  const top = git?.exitCode === 0 ? normalize(git.stdout.trim()) : ''
   return {
     root,
+    lockRoot: top && relative(top, root) !== undefined ? top : root,
     commentsFile: resolve(root, commentsFile),
     progressDir: `${stateRoot}/${hash}/progress`,
   }
@@ -165,8 +188,18 @@ const writesFromBash = (command: string) =>
   !RESOLVE.test(command) &&
   BASH_WRITES.some((pattern) => pattern.test(command))
 
-function describe(root: string, tool: string, args: Record<string, string | undefined>) {
-  const repoPath = (file = '') => relative(root, resolve(root, file)) ?? basename(file)
+function describe(
+  project: Project,
+  tool: string,
+  args: Record<string, string | undefined>,
+) {
+  // From the project, as the agent's prompt and the reader see paths.
+  const repoPath = (file = '') => {
+    const full = resolve(project.root, file)
+    return relative(project.lockRoot, full) === undefined
+      ? basename(file)
+      : relativeFrom(project.root, full)
+  }
   if (tool.startsWith('mcp__')) {
     const [, server, name] = tool.split('__')
     return { kind: 'mcp', label: `${server} · ${name}` }
@@ -204,7 +237,7 @@ const lockKey = (root: string, target: string) => `${root}\n${target}`
 
 async function tryLock($: $, project: Project, owner: string, target: string) {
   const active = await activeCommentIds($, project)
-  const key = lockKey(project.root, target)
+  const key = lockKey(project.lockRoot, target)
   let holder: string | undefined
   await update($, locks, (all) => {
     const held = all[key]
@@ -223,7 +256,7 @@ async function tryLock($: $, project: Project, owner: string, target: string) {
   return holder
 }
 
-async function releaseAll($: $, root: string, owner: string) {
+async function releaseAll($: $, { lockRoot: root }: Project, owner: string) {
   const released: string[] = []
   await update($, locks, (all) => {
     released.length = 0
@@ -238,8 +271,8 @@ async function releaseAll($: $, root: string, owner: string) {
   return released
 }
 
-async function unlock($: $, root: string, owner: string, target: string) {
-  const key = lockKey(root, target)
+async function unlock($: $, project: Project, owner: string, target: string) {
+  const key = lockKey(project.lockRoot, target)
   await update($, locks, (all) => {
     if (all[key]?.owner !== owner) return all
     const { [key]: _, ...rest } = all
@@ -260,14 +293,16 @@ async function lockTarget(
     return `Comment ${binding.comment} was cancelled, resolved or deleted by the reader. Stop now: make no further changes and reply "CANCELLED".`
   }
   const relativeTarget =
-    target === '@build' ? target : relative(project.root, resolve(project.root, target))
+    target === '@build'
+      ? target
+      : relative(project.lockRoot, resolve(project.root, target))
   if (relativeTarget === undefined) return undefined
   const deadline = (await $.clock.now()) + LOCK_WAIT_MS
   for (;;) {
     const holder = await tryLock($, project, binding.comment, relativeTarget)
     if (holder === undefined) return undefined
     if ((await $.clock.now()) >= deadline) {
-      const released = await releaseAll($, project.root, binding.comment)
+      const released = await releaseAll($, project, binding.comment)
       await record($, project, binding.comment, [
         {
           ...step,
@@ -301,7 +336,7 @@ async function setBinding($: $, agent: string, binding: Binding | undefined) {
 async function finish($: $, agent: string, root: string, comment: string) {
   const project = await loadProject($, root)
   await setBinding($, agent, undefined)
-  await releaseAll($, root, comment)
+  await releaseAll($, project, comment)
   const file = `${project.progressDir}/${comment}.jsonl`
   await writes.get(file)
   writes.delete(file)
@@ -359,7 +394,7 @@ export const register: Register = (on) => {
       const step = {
         at: Date.now(),
         id: e.tool_use_id,
-        ...describe(project.root, e.tool, args),
+        ...describe(project, e.tool, args),
       }
       if (e.tool === 'Bash' && writesFromBash(args.command ?? '')) {
         await record($, project, binding.comment, [
@@ -393,11 +428,11 @@ export const register: Register = (on) => {
     if (!bound) return ran
     const project = await loadProject($, bound.root)
     // A failed build frees the build lock as a successful one does.
-    if (BUILD.test(command)) await unlock($, project.root, bound.comment, '@build')
+    if (BUILD.test(command)) await unlock($, project, bound.comment, '@build')
     const step: Step = {
       at: Date.now(),
       id: e.tool_use_id,
-      ...describe(project.root, e.tool, args),
+      ...describe(project, e.tool, args),
       state: ran.isError ? 'failed' : 'done',
     }
     if (ran.isError) step.error = short((ran.text ?? '').trim().split('\n')[0] ?? '', 160)
@@ -435,7 +470,7 @@ export const register: Register = (on) => {
   on('turn.complete', async ($, e, next) => {
     const binding = e.agentId ? await bindingOf($, e.agentId) : undefined
     if (e.agentId && binding) {
-      await releaseAll($, binding.root, binding.comment)
+      await releaseAll($, await loadProject($, binding.root), binding.comment)
       await setBinding($, e.agentId, undefined)
     }
     return next(e)
