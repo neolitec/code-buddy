@@ -68,7 +68,9 @@ It runs, in order:
 `npm run test:hooks` checks the hooks module with Claude Code itself
 (`claude plugin validate`, then `claude plugin test` on `test/hooks.test.ts`).
 It needs Claude Code 2.1.287 or later, which CI does not install: run it
-whenever you change `hooks/` or `types/`. To type-check the module, load the
+whenever you change `hooks/` or `types/`. In a real session, `/code-buddy-debug on`
+logs every decision the hooks make (README, Troubleshooting); log a new
+decision with `debug(...)` when you add one. To type-check the module, load the
 plugin once (`claude --plugin-dir .`): Claude Code writes its API types to
 `.claude-plugin/types/` and a `tsconfig.json` that reads them (both
 git-ignored), and `npx tsc -p .` then checks `hooks/` and `types/`.

@@ -212,6 +212,9 @@ deleting `.code-buddy/`: it holds the reader's comments.
 
 ## Rules
 
+- When an agent shows no progress, or agents clash on a file, suggest
+  `/code-buddy-debug on`, then read `~/.cache/code-buddy/hook.log`
+  (README, Troubleshooting).
 - Never delete comments or reset the comments file; the reader owns it.
   Automated checks point the server at another file with
   `CODE_BUDDY_COMMENTS_FILE`.
