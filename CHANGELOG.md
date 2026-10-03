@@ -38,7 +38,9 @@ released to the `stable` branch.
 - An agent could write files from Bash (`sed -i`, an inline Python or Node
   script, `cat >`, `tee`), where no lock covers them: agents edited the same
   file at once. The hooks now refuse those commands to an agent working on a
-  comment and ask for Edit or Write, and the agent's prompt says so.
+  comment and ask for Edit or Write, and the agent's prompt says so. A
+  command whose files are all visibly outside the repository (a scratch file
+  in `/tmp`) still runs.
 - The file locks and the progress never worked in the agents: the hooks were
   declared in the skill, and a skill's hooks do not fire in subagents. The
   plugin now declares them, and they skip Node unless an agent works on a

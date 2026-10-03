@@ -274,3 +274,27 @@ test('binds the project claim.mjs found, whatever --project says', async ($, on)
   await $.tool.call(bash('a1', cdThen('resolve.mjs')))
   expect(w.removed).toEqual([w.progressPath('c1')])
 })
+
+test('lets an agent write from Bash outside the repository, where no lock is needed', async ($, on) => {
+  world(on, [{ id: 'c1', status: 'open' }], { gitRoot: '/repo' })
+  await $.tool.call(bash('a1', claim('c1')))
+  const outside = [
+    `cat > /tmp/scratch/g5.py <<'EOF'\nopen_report()\nEOF`,
+    `npm test 2>&1 | tee /tmp/scratch/test.log`,
+    `sed -i '' 's/a/b/' /tmp/scratch/notes.txt`,
+  ]
+  for (const command of outside) {
+    expect((await $.tool.call(bash('a1', command))).deny).toBeUndefined()
+  }
+  const inside = [
+    `cat > /repo/ssd_scanner/x.py <<'EOF'\nX = 1\nEOF`,
+    `echo x | tee /tmp/scratch/a.log /repo/web/src/a.ts`,
+    `sed -i '' 's/a/b/' /repo/web/src/a.ts`,
+    // An inline script: what it writes cannot be told.
+    `python3 -c "open('/tmp/scratch/x', 'w').write('x')"`,
+  ]
+  for (const command of inside) {
+    const ran = await $.tool.call(bash('a1', command))
+    expect(ran.deny ?? ran.text).toMatch(/Edit or Write tool/)
+  }
+})

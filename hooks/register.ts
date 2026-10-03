@@ -46,16 +46,18 @@ const RESOLVE = new RegExp(String.raw`\b(?:resolve|ask)\.mjs\s+(${WORD})`)
 // which the hooks cannot see (`--project .` after a `cd`).
 const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*)$/m
 // A Bash command that writes files takes no lock: refused to an agent working
-// on a comment, which must use Edit or Write. Best effort, on the usual forms:
-// in-place editors, an inline script writing a file, cat or tee into one.
-const BASH_WRITES = [
-  /\b(?:sed|perl)\s+(?:-\S+\s+)*-[\w-]*i/,
+// on a comment, which must use Edit or Write. Best effort, on the usual forms.
+// What an inline script writes cannot be told: always refused.
+const SCRIPT_WRITES = [
   /\bopen\([^)]*,\s*['"][wax]b?\+?['"]/,
   /\.write_(?:text|bytes)\(/,
   /\b(?:writeFile|appendFile)(?:Sync)?\s*\(/,
-  /\bcat\s*>/,
-  /\btee\b/,
 ]
+// An in-place editor, cat or tee names its files: refused only when one may be
+// in the repository (a relative path, after some `cd`, may be).
+const IN_PLACE = /\b(?:sed|perl)\s+(?:-\S+\s+)*-[\w-]*i/
+const CAT_INTO = /\bcat\s*>>?\s*(\S+)/
+const TEE = /\btee\b((?:\s+[^\s|;&<>]+)*)/
 // Claude Code's own plumbing, not the agent's work.
 const INTERNAL_TOOLS = new Set(['SubagentHandback'])
 
@@ -77,6 +79,7 @@ const relative = (root: string, file: string) =>
     : file.startsWith(`${root}/`)
       ? file.slice(root.length + 1)
       : undefined
+const unquote = (value: string) => value.replace(/^["']|["']$/g, '')
 const basename = (file: string) => file.slice(file.lastIndexOf('/') + 1)
 /** `file` as seen from `root`, `../` included. */
 function relativeFrom(root: string, file: string) {
@@ -185,10 +188,31 @@ function writeTarget(tool: string, args: Record<string, string | undefined>) {
 }
 
 /** The agent's own scripts pass: an answer may quote anything. */
-const writesFromBash = (command: string) =>
-  !CLAIM.test(command) &&
-  !RESOLVE.test(command) &&
-  BASH_WRITES.some((pattern) => pattern.test(command))
+function writesFromBash(command: string, project: Project) {
+  if (CLAIM.test(command) || RESOLVE.test(command)) return false
+  if (SCRIPT_WRITES.some((pattern) => pattern.test(command))) return true
+  const targets: string[] = []
+  for (const segment of command.split(/&&|\|\||[;|\n]/)) {
+    const words = segment.trim().split(/\s+/)
+    if (IN_PLACE.test(segment)) targets.push(words.at(-1) ?? '')
+    const into = CAT_INTO.exec(segment)?.[1]
+    if (into) targets.push(into)
+    const teed = TEE.exec(segment)?.[1]
+    if (teed)
+      targets.push(
+        ...teed
+          .trim()
+          .split(/\s+/)
+          .filter((word) => !word.startsWith('-')),
+      )
+  }
+  return targets.some((target) => {
+    const file = unquote(target)
+    return (
+      !file.startsWith('/') || relative(project.lockRoot, normalize(file)) !== undefined
+    )
+  })
+}
 
 function describe(
   project: Project,
@@ -404,7 +428,7 @@ export const register: Register = (on) => {
         id: e.tool_use_id,
         ...describe(project, e.tool, args),
       }
-      if (e.tool === 'Bash' && writesFromBash(args.command ?? '')) {
+      if (e.tool === 'Bash' && writesFromBash(args.command ?? '', project)) {
         await record($, project, binding.comment, [
           {
             ...step,
