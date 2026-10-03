@@ -93,15 +93,106 @@ const short = (text: string, max = 80) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text
 const clip = (text: string) => short(text.trim().replace(/\s+/g, ' '), MAX_TEXT)
 
+// ---------------------------------------------------------------------------
+// The hook log: what the hooks decide for the agents working on comments, one
+// line each, to check them in a real session. Off unless the marker file
+// exists; `/code-buddy-debug on` creates it, in the state folder every session
+// shares, so it turns the log on in all of them within a few seconds.
+
+// The marker is checked at most this often: no file access per tool call.
+const RECHECK_MS = 5_000
+// $.fs has no append, so each line rewrites the log: keep it small.
+const MAX_LOG = 256 * 1024
+const SHOWN_LINES = 20
+
+let stateDirOnce: Promise<string> | undefined
+let checkedAt = -Infinity
+let isOn = false
+let writing: Promise<void> = Promise.resolve()
+
+/** lib/project.mjs's state folder: CODE_BUDDY_STATE_DIR, else the user's cache. */
+function stateDir($: $): Promise<string> {
+  stateDirOnce ??= (async () => {
+    const set = await $.env.get('CODE_BUDDY_STATE_DIR')
+    if (set) return set
+    const cache =
+      (await $.env.get('XDG_CACHE_HOME')) ?? `${await $.env.get('HOME')}/.cache`
+    return `${cache}/code-buddy`
+  })()
+  return stateDirOnce
+}
+
+const paths = async ($: $) => {
+  const dir = await stateDir($)
+  return { marker: `${dir}/debug`, log: `${dir}/hook.log` }
+}
+
+async function isLogging($: $) {
+  const now = Date.now()
+  if (now - checkedAt >= RECHECK_MS) {
+    checkedAt = now
+    isOn = await $.fs.exists((await paths($)).marker).catch(() => false)
+  }
+  return isOn
+}
+
+/**
+ * Appends `<time> <agent> <comment> <message>` to the log when it is on.
+ * `comment` is `-` before the agent claimed one.
+ */
+async function debug($: $, agent: string, comment: string, message: string) {
+  if (!(await isLogging($))) return
+  const { log } = await paths($)
+  const line = `${new Date().toISOString()} ${agent} ${comment} ${message}\n`
+  writing = writing
+    .then(async () => {
+      let text = await $.fs.read(log).catch(() => '')
+      if (text.length > MAX_LOG)
+        text = text.slice(text.indexOf('\n', text.length - MAX_LOG / 2) + 1)
+      return $.fs.write(log, text + line)
+    })
+    .catch(() => undefined)
+  return writing
+}
+
+/** `/code-buddy-debug [on|off]`: the answer the person reads. */
+async function debugCommand($: $, args: string): Promise<string> {
+  const { marker, log } = await paths($)
+  const follow = `Follow it from a terminal: tail -f ${log}`
+  const word = args.trim().toLowerCase()
+  if (word === 'on') {
+    await $.fs.write(marker, '')
+    checkedAt = -Infinity
+    return [
+      `Code Buddy's hook log is on, in every Claude Code session (within ${RECHECK_MS / 1000} s).`,
+      follow,
+      'Turn it off with /code-buddy-debug off.',
+    ].join('\n')
+  }
+  if (word === 'off') {
+    await $.process.run(['rm', '-f', marker])
+    checkedAt = -Infinity
+    return `Code Buddy's hook log is off. What it logged stays in ${log}.`
+  }
+  if (word) return 'Usage: /code-buddy-debug [on|off]. Without a word, it shows the log.'
+  const on = await $.fs.exists(marker)
+  const text = await $.fs.read(log).catch(() => '')
+  const last = text.trimEnd().split('\n').filter(Boolean).slice(-SHOWN_LINES)
+  return [
+    on
+      ? `Code Buddy's hook log is on. ${follow}`
+      : "Code Buddy's hook log is off: /code-buddy-debug on turns it on.",
+    ...(last.length ? ['', `Last ${last.length} line(s) of ${log}:`, ...last] : []),
+  ].join('\n')
+}
+
 const projects = new Map<string, Promise<Project>>()
 
 async function loadProjectOnce($: $, root: string): Promise<Project> {
   const config: { commentsFile?: string } = JSON.parse(
     await $.fs.read(`${root}/.code-buddy.json`),
   )
-  const home = await $.env.get('HOME')
-  const cache = (await $.env.get('XDG_CACHE_HOME')) ?? `${home}/.cache`
-  const stateRoot = (await $.env.get('CODE_BUDDY_STATE_DIR')) ?? `${cache}/code-buddy`
+  const stateRoot = await stateDir($)
   const commentsFile =
     (await $.env.get('CODE_BUDDY_COMMENTS_FILE')) ??
     config.commentsFile ??
@@ -174,10 +265,29 @@ function appendProgress($: $, project: Project, comment: string, steps: Step[]) 
 }
 
 /** Nothing for a comment the reader stopped: its agent may still call tools. */
-async function record($: $, project: Project, comment: string, steps: Step[]) {
+async function record(
+  $: $,
+  agent: string,
+  project: Project,
+  comment: string,
+  steps: Step[],
+) {
+  if (!steps.length) return
   const active = await activeCommentIds($, project)
-  if (active && !active.has(comment)) return
+  if (active && !active.has(comment)) {
+    await debug($, agent, comment, 'recorded nothing: the comment is no longer active')
+    return
+  }
   await appendProgress($, project, comment, steps)
+  for (const step of steps) {
+    const state = typeof step.state === 'string' ? ` ${step.state}` : ''
+    await debug(
+      $,
+      agent,
+      comment,
+      `recorded ${String(step.kind)}${state} "${String(step.label)}"`,
+    )
+  }
 }
 
 function writeTarget(tool: string, args: Record<string, string | undefined>) {
@@ -309,27 +419,42 @@ async function unlock($: $, project: Project, owner: string, target: string) {
 /** The deny message, or undefined when the agent holds the lock. */
 async function lockTarget(
   $: $,
+  agent: string,
   project: Project,
   binding: Binding,
   target: string,
   step: Step,
 ): Promise<string | undefined> {
+  const log = (message: string) => debug($, agent, binding.comment, message)
   const active = await activeCommentIds($, project)
   if (active && !active.has(binding.comment)) {
+    await log(`refused ${target}: the reader stopped or resolved the comment`)
     return `Comment ${binding.comment} was cancelled, resolved or deleted by the reader. Stop now: make no further changes and reply "CANCELLED".`
   }
   const relativeTarget =
     target === '@build'
       ? target
       : relative(project.lockRoot, resolve(project.root, target))
-  if (relativeTarget === undefined) return undefined
+  if (relativeTarget === undefined) {
+    await log(`no lock for ${target}: outside ${project.lockRoot}`)
+    return undefined
+  }
   const deadline = (await $.clock.now()) + LOCK_WAIT_MS
+  let waited = false
   for (;;) {
     const holder = await tryLock($, project, binding.comment, relativeTarget)
-    if (holder === undefined) return undefined
+    if (holder === undefined) {
+      await log(`locked ${relativeTarget}`)
+      return undefined
+    }
+    if (!waited) await log(`waiting for ${relativeTarget}, held by comment ${holder}`)
+    waited = true
     if ((await $.clock.now()) >= deadline) {
       const released = await releaseAll($, project, binding.comment)
-      await record($, project, binding.comment, [
+      await log(
+        `refused ${relativeTarget}: still held by comment ${holder}; released ${released.length} lock(s)`,
+      )
+      await record($, agent, project, binding.comment, [
         {
           ...step,
           state: 'failed',
@@ -361,7 +486,13 @@ async function setBinding($: $, agent: string, binding: Binding | undefined) {
 
 async function finish($: $, agent: string, project: Project, comment: string) {
   await setBinding($, agent, undefined)
-  await releaseAll($, project, comment)
+  const released = await releaseAll($, project, comment)
+  await debug(
+    $,
+    agent,
+    comment,
+    `run ended (answered or asked): unbound, released ${released.length} lock(s), progress dropped`,
+  )
   const file = `${project.progressDir}/${comment}.jsonl`
   await writes.get(file)
   writes.delete(file)
@@ -386,10 +517,17 @@ async function followScripts($: $, agent: string, command: string, output: strin
   }
   const claimed = CLAIMED.exec(output)
   if (claimed?.[1] && claimed[2]) {
-    await setBinding($, agent, {
-      root: normalize(claimed[2].trim()),
-      comment: claimed[1],
-    })
+    const root = normalize(claimed[2].trim())
+    await setBinding($, agent, { root, comment: claimed[1] })
+    await debug($, agent, claimed[1], `bound to comment ${claimed[1]} in ${root}`)
+  } else if (CLAIM.test(command)) {
+    const said = output.trim().split('\n')[0] ?? ''
+    await debug(
+      $,
+      agent,
+      '-',
+      `claim.mjs printed no project, so the agent is not bound: ${short(said, 160)}`,
+    )
   }
   return false
 }
@@ -398,8 +536,15 @@ async function followScripts($: $, agent: string, command: string, output: strin
 async function projectOf($: $, agent: string, binding: Binding) {
   try {
     return await loadProject($, binding.root)
-  } catch {
+  } catch (error) {
     await setBinding($, agent, undefined)
+    const why = error instanceof Error ? error.message : String(error)
+    await debug(
+      $,
+      agent,
+      binding.comment,
+      `cannot read ${binding.root}/.code-buddy.json (${short(why, 120)}): binding dropped`,
+    )
     return undefined
   }
 }
@@ -409,8 +554,21 @@ export const register: Register = (on) => {
   // without them, agents would work with no locks and no progress.
   on('session.start', async ($, e, next) => {
     await $.env.set('CODE_BUDDY_HOOKS', '1')
+    await $.command.register({
+      name: 'code-buddy-debug',
+      description:
+        "Code Buddy: log what the plugin's hooks decide (on, off, or show the log)",
+      argumentHint: '[on|off]',
+      immediate: true,
+    })
+    const { version } = await $.session.version()
+    await debug($, 'main', '-', `hooks loaded in a new session (Claude Code ${version})`)
     return next(e)
   })
+
+  on('command.run', { command: 'code-buddy-debug' }, async ($, e) => ({
+    text: await debugCommand($, e.args),
+  }))
 
   on('tool.call', async ($, e, next) => {
     if (INTERNAL_TOOLS.has(e.tool)) return next(e)
@@ -429,7 +587,13 @@ export const register: Register = (on) => {
         ...describe(project, e.tool, args),
       }
       if (e.tool === 'Bash' && writesFromBash(args.command ?? '', project)) {
-        await record($, project, binding.comment, [
+        await debug(
+          $,
+          agent,
+          binding.comment,
+          `refused a Bash write: ${short(args.command ?? '', 120)}`,
+        )
+        await record($, agent, project, binding.comment, [
           {
             ...step,
             state: 'failed',
@@ -444,10 +608,10 @@ export const register: Register = (on) => {
       }
       const target = writeTarget(e.tool, args)
       if (target) {
-        const deny = await lockTarget($, project, binding, target, step)
+        const deny = await lockTarget($, agent, project, binding, target, step)
         if (deny) return { deny }
       }
-      await record($, project, binding.comment, [{ ...step, state: 'running' }])
+      await record($, agent, project, binding.comment, [{ ...step, state: 'running' }])
     }
 
     const ran = await next(e)
@@ -460,7 +624,10 @@ export const register: Register = (on) => {
     const boundProject = bound && (await projectOf($, agent, bound))
     if (!bound || !boundProject) return ran
     // A failed build frees the build lock as a successful one does.
-    if (BUILD.test(command)) await unlock($, boundProject, bound.comment, '@build')
+    if (BUILD.test(command)) {
+      await unlock($, boundProject, bound.comment, '@build')
+      await debug($, agent, bound.comment, 'build ended: released the build lock')
+    }
     const step: Step = {
       at: Date.now(),
       id: e.tool_use_id,
@@ -468,7 +635,7 @@ export const register: Register = (on) => {
       state: ran.isError ? 'failed' : 'done',
     }
     if (ran.isError) step.error = short((ran.text ?? '').trim().split('\n')[0] ?? '', 160)
-    await record($, boundProject, bound.comment, [step])
+    await record($, agent, boundProject, bound.comment, [step])
     return ran
   })
 
@@ -494,7 +661,7 @@ export const register: Register = (on) => {
         steps.push({ at, kind: 'message', label: clip(block.text) })
       }
     }
-    await record($, project, binding.comment, steps)
+    await record($, e.agentId, project, binding.comment, steps)
     return stored
   })
 
@@ -504,8 +671,14 @@ export const register: Register = (on) => {
     const binding = e.agentId ? await bindingOf($, e.agentId) : undefined
     if (e.agentId && binding) {
       const project = await projectOf($, e.agentId, binding)
-      if (project) await releaseAll($, project, binding.comment)
+      const released = project ? await releaseAll($, project, binding.comment) : []
       await setBinding($, e.agentId, undefined)
+      await debug(
+        $,
+        e.agentId,
+        binding.comment,
+        `turn ended: unbound, released ${released.length} lock(s)`,
+      )
     }
     return next(e)
   })

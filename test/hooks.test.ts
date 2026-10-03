@@ -1,7 +1,7 @@
 // The hooks module (hooks/register.ts), run by `claude plugin test .` against
 // Claude Code itself: the disk, processes and tools beneath it are in memory.
 import { expect, mock, test } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { CommandRunInput, On } from 'claude-code'
 
 const ROOT = '/repo/web'
 const SCRIPTS = '/s/scripts'
@@ -31,6 +31,9 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     files.set(e.path, e.text)
     return { value: undefined }
   })
+  on('fs.exists', (_$, e) => ({ value: files.has(e.path) }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  on('session.version', () => ({ value: { version: '2.1.287' } }))
   on('process.run', (_$, e) => {
     if (e.argv.includes('--show-toplevel')) {
       return {
@@ -68,8 +71,10 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
   on('tool.call', (_$, e) => {
     const claimed =
       e.tool === 'Bash' ? /claim\.mjs (\S+)/.exec(e.command)?.[1] : undefined
+    if (claimed === 'gone') return { result: 'ok', text: 'comment gone is resolved\n' }
+    const root = claimed === 'moved' ? '/nowhere' : ROOT
     return claimed
-      ? { result: 'ok', text: `claimed ${claimed} (/) project=${ROOT}\n` }
+      ? { result: 'ok', text: `claimed ${claimed} (/) project=${root}\n` }
       : { result: 'ok' }
   })
   on('turn.complete', () => ({ text: '' }))
@@ -79,6 +84,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
   const progressPath = (id: string) =>
     [...files.keys(), ...removed].find((path) => path.endsWith(`/progress/${id}.jsonl`))
   return {
+    file: (path: string) => files.get(path),
     env,
     clock,
     removed,
@@ -297,4 +303,55 @@ test('lets an agent write from Bash outside the repository, where no lock is nee
     const ran = await $.tool.call(bash('a1', command))
     expect(ran.deny ?? ran.text).toMatch(/Edit or Write tool/)
   }
+})
+
+const LOG = '/home/u/.cache/code-buddy/hook.log'
+const debugCommand = (args: string): CommandRunInput => ({
+  command: 'code-buddy-debug',
+  args,
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: false, columns: 100 },
+})
+
+test('logs nothing while the hook log is off', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.file(LOG)).toBeUndefined()
+})
+
+test('/code-buddy-debug turns the hook log on, shows it, and turns it off', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const turnedOn = await $.command.run(debugCommand('on'))
+  expect(turnedOn.text).toMatch(/tail -f \/home\/u\/\.cache\/code-buddy\/hook\.log/)
+
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  const log = w.file(LOG) ?? ''
+  expect(log).toMatch(/ a1 c1 bound to comment c1 in \/repo\/web\n/)
+  expect(log).toMatch(/ a1 c1 locked src\/App\.tsx\n/)
+  expect(log).toMatch(/ a1 c1 recorded edit done "src\/App\.tsx"\n/)
+
+  const shown = await $.command.run(debugCommand(''))
+  expect(shown.text).toMatch(/hook log is on/i)
+  expect(shown.text).toMatch(/locked src\/App\.tsx/)
+
+  await $.command.run(debugCommand('off'))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.file(LOG)).toBe(log)
+})
+
+test('logs why an agent is not bound, or no longer', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  await $.command.run(debugCommand('on'))
+  await $.tool.call(bash('a1', claim('gone')))
+  await $.tool.call(bash('a2', claim('moved')))
+  await $.tool.call(edit('a2', `${ROOT}/src/App.tsx`))
+  const log = w.file(LOG) ?? ''
+  expect(log).toMatch(
+    / a1 - claim\.mjs printed no project, so the agent is not bound: comment gone is resolved\n/,
+  )
+  expect(log).toMatch(
+    / a2 moved cannot read \/nowhere\/\.code-buddy\.json.*: binding dropped\n/,
+  )
 })

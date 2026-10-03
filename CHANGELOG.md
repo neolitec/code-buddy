@@ -20,6 +20,11 @@ released to the `stable` branch.
 
 ### Added
 
+- **The hook log**, to check what the plugin's hooks do in a real session:
+  `/code-buddy-debug on` turns it on in every session, `tail -f
+  ~/.cache/code-buddy/hook.log` follows it, `/code-buddy-debug` shows its last
+  lines. See [Troubleshooting](README.md#troubleshooting).
+
 - Claude can ask the reader a question in the thread (`ask.mjs`) instead of
   guessing; the comment waits on the reader's answer.
 
