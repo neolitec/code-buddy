@@ -34,6 +34,9 @@ released to the `stable` branch.
 
 ### Fixed
 
+- A long current step under a comment was cut off mid-word instead of ending
+  with an ellipsis, and its working dots were hidden; it now ends with one
+  ellipsis, and the dots show whenever the step fits.
 - An agent that claimed its comment with a relative `--project` (`--project .`
   after a `cd`) worked with no locks and no progress: the hooks now bind it to
   the project `claim.mjs` found, which it prints.

@@ -104,14 +104,17 @@ function StepLine({
       <span className="cb-step-icon">
         <Icon name={step ? (STEP_ICONS[step.kind] ?? 'wrench') : 'lightning'} />
       </span>
-      <span>{activityOf(step)}</span>
-      {!failed && (
-        <span className="cb-dots" aria-hidden="true">
-          <i>.</i>
-          <i>.</i>
-          <i>.</i>
-        </span>
-      )}
+      {/* The dots inside the text: cut with it, they leave one ellipsis, not two. */}
+      <span className="cb-current-text">
+        {activityOf(step)}
+        {!failed && (
+          <span className="cb-dots" aria-hidden="true">
+            <i>.</i>
+            <i>.</i>
+            <i>.</i>
+          </span>
+        )}
+      </span>
     </div>
   )
 }

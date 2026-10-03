@@ -187,7 +187,8 @@ code { font-family: var(--cb-mono); }
 .cb-current { position: relative; overflow: hidden; padding: 8px 10px; border-radius: var(--cb-radius); background: var(--cb-accent-weak); color: var(--cb-accent-strong); font-size: 13px; font-weight: 600; }
 .cb-current:has(.cb-current-line--failed) { background: var(--cb-red-bg); }
 .cb-current-line { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.cb-current-line > span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* The icon comes first: the text, not it, gives way with an ellipsis. */
+.cb-current-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cb-current-line svg { width: 14px; height: 14px; flex-shrink: 0; }
 .cb-current-line--failed { color: var(--cb-red); }
 /* The running step's icon: filled, with a pulsing ring. */
@@ -199,7 +200,6 @@ code { font-family: var(--cb-mono); }
 @keyframes cb-slide-out { to { transform: translateX(100%); opacity: 0; } }
 @keyframes cb-slide-in { from { transform: translateX(-100%); opacity: 0; } }
 /* One dot, then two, then three. */
-.cb-dots { flex-shrink: 0; margin-left: -8px; }
 .cb-dots i { font-style: normal; }
 .cb-dots i:nth-child(2) { animation: cb-dot-2 1.2s steps(1) infinite; }
 .cb-dots i:nth-child(3) { animation: cb-dot-3 1.2s steps(1) infinite; }
