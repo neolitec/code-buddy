@@ -23,6 +23,14 @@ if (!found) {
   process.exit(2)
 }
 const project = found
+// The plugin's hooks (a Claude Code mod) set it in the session that starts the
+// server. Without them agents would edit with no locks and show no progress.
+if (!process.env.CODE_BUDDY_HOOKS) {
+  console.log(
+    "HOOKS_MISSING Code Buddy's hooks did not load: they need Claude Code 2.1.287 or later",
+  )
+  process.exit(2)
+}
 const { config } = project
 const port = Number(process.env.CODE_BUDDY_PORT ?? config.port ?? 4599)
 const pollMs = Number(process.env.CODE_BUDDY_POLL_MS ?? 1000)

@@ -7,6 +7,17 @@ released to the `stable` branch.
 
 ## Unreleased
 
+### Changed
+
+- **Code Buddy now needs Claude Code 2.1.287 or later.** Its hooks are a
+  Claude Code mod, loaded once per session: they start no process per tool
+  call, where the shell hooks started Node twice for each tool call of an
+  agent working on a comment. On an older Claude Code, `/code-buddy:code-buddy`
+  says so and does not start (the server prints `HOOKS_MISSING`).
+- The file locks live in the session, as the agents do: `lock.mjs` is gone.
+  An agent waits up to 6 seconds for a file another comment's agent holds,
+  then releases its locks and retries, as before.
+
 ### Added
 
 - Claude can ask the reader a question in the thread (`ask.mjs`) instead of
@@ -18,6 +29,18 @@ released to the `stable` branch.
 
 ### Fixed
 
+- An agent that claimed its comment with a relative `--project` (`--project .`
+  after a `cd`) worked with no locks and no progress: the hooks now bind it to
+  the project `claim.mjs` found, which it prints.
+- Files outside the project (an `editable` folder such as `../api`) were
+  never locked: the locks now cover the whole git repository the project is
+  in, and the widget shows those files as `../api/…`.
+- An agent could write files from Bash (`sed -i`, an inline Python or Node
+  script, `cat >`, `tee`), where no lock covers them: agents edited the same
+  file at once. The hooks now refuse those commands to an agent working on a
+  comment and ask for Edit or Write, and the agent's prompt says so. A
+  command whose files are all visibly outside the repository (a scratch file
+  in `/tmp`) still runs.
 - The file locks and the progress never worked in the agents: the hooks were
   declared in the skill, and a skill's hooks do not fire in subagents. The
   plugin now declares them, and they skip Node unless an agent works on a

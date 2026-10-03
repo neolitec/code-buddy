@@ -45,12 +45,15 @@ to stop it.
 - **The widget is framework-agnostic.** It ships its own React inside a shadow
   root, so it works on Next.js, Vite, CRA or anything served by a dev server,
   without touching your styles or dependencies.
-- **Agents work in parallel safely.** One background agent per comment; a
-  plugin hook takes a per-file lock before every write, so two agents never
-  edit the same file at once. What each agent does (files read and edited,
-  commands, MCP calls, its messages and thinking) shows up live under the
-  comment. The hook runs for every tool call of every session, but exits
-  without starting Node unless an agent is working on a comment.
+- **Agents work in parallel safely.** One background agent per comment; the
+  plugin's hooks take a per-file lock before every write, so two agents never
+  edit the same file at once, and refuse an agent a Bash command that writes
+  files, which no lock could cover. What each agent does (files read and
+  edited, commands, MCP calls, its messages and thinking) shows up live under
+  the comment. The hooks are a Claude Code
+  [mod](https://claude.dev/blog/getting-started-with-claude-code-mods/), loaded
+  once per session: they start no process per tool call, and act only for an
+  agent working on a comment.
 
 ## Install
 
@@ -68,7 +71,9 @@ without a build. Get new versions with `claude plugin marketplace update
 code-buddy`, or turn on auto-update for the marketplace in `/plugin`; the
 [changelog](CHANGELOG.md) lists what each brings.
 
-Requires Claude Code and Node.js 22 or later.
+Requires Claude Code 2.1.287 or later (`claude update`), for its mods, and
+Node.js 22 or later. On an older Claude Code, `/code-buddy:code-buddy` says so
+and does not start.
 
 Then, in your frontend project:
 
@@ -136,7 +141,7 @@ What to do after a change:
 
 | You changed | To see it |
 |---|---|
-| `SKILL.md`, `hooks/hooks.json` | `/reload-plugins` in the session, or a new session |
+| `SKILL.md`, `hooks/*` | `/reload-plugins` in the session, or a new session |
 | `scripts/*.mjs` except the server | Nothing: each call runs the script again |
 | `scripts/server.mjs`, `scripts/lib/*` | Restart the server: run `/code-buddy:code-buddy` again |
 | `widget/src/*` | Rebuild the widget, then reload the app page |
@@ -161,10 +166,18 @@ Paths below are relative to `skills/code-buddy/`.
 |---|---|
 | `SKILL.md` | The skill: watch, init, update, uninstall; agent prompts |
 | `scripts/server.mjs` | Local server: widget, API, events for the managing session |
-| `scripts/hook.sh`, `hook.mjs` | The plugin's hook (declared in `hooks/hooks.json` at the repository root): file locks and live progress |
-| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs`, `lock.mjs` | Used by the agents |
+| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs` | Used by the agents |
 | `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
 | `widget/src` | The widget (React, TypeScript) |
+
+At the repository root, `hooks/register.ts` is the plugin's hooks module (a
+Claude Code mod, declared in `hooks/hooks.json`): file locks and live progress.
+The values it keeps for the session are typed in `types/index.d.ts`, and
+`test/hooks.test.ts` tests it against Claude Code itself:
+
+```sh
+npm run test:hooks   # claude plugin validate, then claude plugin test
+```
 
 `.claude-plugin/` holds the plugin and marketplace manifests. Run
 `claude plugin validate .` from the repository root after editing them.

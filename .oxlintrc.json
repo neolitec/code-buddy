@@ -21,6 +21,12 @@
       }
     },
     {
+      "files": ["hooks/**", "test/hooks.test.ts"],
+      "rules": {
+        "no-await-in-loop": "off"
+      }
+    },
+    {
       "files": ["skills/code-buddy/widget/src/**"],
       "env": {
         "browser": true

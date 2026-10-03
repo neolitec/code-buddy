@@ -58,7 +58,11 @@ given) resumes it and nothing is lost.
    It first prints `READY <url>`. On `PORT_BUSY`, report who holds the port
    and stop: another session may already be watching this project. On
    `WIDGET_MISSING`, Code Buddy runs from a clone: give the user the command
-   it prints, and stop.
+   it prints, and stop. On `HOOKS_MISSING`, the plugin's hooks did not load in
+   this session, and agents would work without file locks or progress: run
+   `claude --version`, tell the user Code Buddy needs Claude Code 2.1.287 or
+   later (`claude update`, then a new session) or, if it is already that
+   recent, that mods may be turned off for this session; then stop.
 2. Tell the user to open or reload `devUrl` from `.code-buddy.json`.
 3. React to each line:
 
@@ -98,9 +102,11 @@ answer to the same subagent.
 >    `cancellation` field lists files an earlier, stopped agent left changed:
 >    keep, finish or revert them to match the current text. When the element
 >    is unclear, screenshot it with Playwright on `<devUrl>`.
-> 3. Make the change, only under `<editable>`. Other agents may edit the
->    project at the same time: a hook locks every file you write and blocks an
->    edit, with an explanation, when another comment's agent holds the file.
+> 3. Make the change, only under `<editable>`, with the Edit and Write tools:
+>    never write files from Bash (`sed -i`, scripts, redirections). Other
+>    agents may edit the project at the same time: a hook locks every file you
+>    write and blocks an edit, with an explanation, when another comment's
+>    agent holds the file.
 >    Then re-read the files you are changing and retry. If the hook says the
 >    reader cancelled the comment, stop at once and reply `CANCELLED`.
 > 4. Run `<checks>`, and `<build>` when a component or a dependency changed.
@@ -209,7 +215,6 @@ deleting `.code-buddy/`: it holds the reader's comments.
 - Never delete comments or reset the comments file; the reader owns it.
   Automated checks point the server at another file with
   `CODE_BUDDY_COMMENTS_FILE`.
-- `node SKILL/scripts/lock.mjs status --project PROJECT` lists held locks.
 - The widget source is `SKILL/widget/src`; `npm ci && npm run build` at the
   repository root (two levels above SKILL) rebuilds `dist/widget.js`. Its
   dependencies are pinned and were security scanned; scan again before

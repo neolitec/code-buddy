@@ -1,22 +1,28 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { before, test } from 'node:test'
 import { tempDir, tempProject } from './helpers.mjs'
+
+/** Writes steps as the hooks module does, one JSON line each. */
+async function appendProgress(project, comment, ...steps) {
+  await mkdir(project.progressDir, { recursive: true })
+  await appendFile(
+    path.join(project.progressDir, `${comment}.jsonl`),
+    steps.map((step) => `${JSON.stringify(step)}\n`).join(''),
+  )
+}
 
 /** @type {typeof import('../skills/code-buddy/scripts/lib/store.mjs')} */
 let store
 /** @type {typeof import('../skills/code-buddy/scripts/lib/project.mjs')} */
 let projects
-/** @type {typeof import('../skills/code-buddy/scripts/lib/agents.mjs')} */
-let agents
 
 before(async (t) => {
   process.env.CODE_BUDDY_STATE_DIR = await tempDir(t)
   store = await import('../skills/code-buddy/scripts/lib/store.mjs')
   projects = await import('../skills/code-buddy/scripts/lib/project.mjs')
-  agents = await import('../skills/code-buddy/scripts/lib/agents.mjs')
 })
 
 async function setUp(t) {
@@ -38,7 +44,7 @@ const claim = (comments, id) =>
 test('an answer resolves the comment, without the run log in comments.json', async (t) => {
   const { project, comments, comment } = await setUp(t)
   await claim(comments, comment.id)
-  await agents.appendProgress(project, comment.id, {
+  await appendProgress(project, comment.id, {
     at: 1,
     kind: 'thinking',
     label: 'secret plan',
@@ -67,7 +73,7 @@ test('a question leaves the comment open, waiting on the reader', async (t) => {
 
 test('only a claimed comment shows progress, a tool merged from start to end', async (t) => {
   const { project, comments, comment } = await setUp(t)
-  await agents.appendProgress(project, comment.id, {
+  await appendProgress(project, comment.id, {
     at: 1,
     id: 't1',
     kind: 'read',
@@ -76,7 +82,7 @@ test('only a claimed comment shows progress, a tool merged from start to end', a
   })
   assert.equal((await comments.list('/'))[0].progress, undefined)
   await claim(comments, comment.id)
-  await agents.appendProgress(project, comment.id, {
+  await appendProgress(project, comment.id, {
     at: 2,
     id: 't1',
     kind: 'read',
@@ -92,7 +98,7 @@ test('only a claimed comment shows progress, a tool merged from start to end', a
 test('a cancellation lists the files written and counts tools, not narration', async (t) => {
   const { project, comments, comment } = await setUp(t)
   await claim(comments, comment.id)
-  await agents.appendProgress(
+  await appendProgress(
     project,
     comment.id,
     { at: 1, kind: 'thinking', label: '' },
@@ -104,19 +110,4 @@ test('a cancellation lists the files written and counts tools, not narration', a
   const cancelled = await comments.update(comment.id, { cancelled: true })
   assert.deepEqual(cancelled.cancellation.changed, ['src/a.ts'])
   assert.equal(cancelled.cancellation.steps, 3)
-})
-
-test('prunes the bindings of agents silent for too long, keeps the others', async (t) => {
-  await mkdir(path.dirname(path.join(projects.AGENTS_DIR, 'x')), { recursive: true })
-  await agents.bind('fresh', '/p', 'c1')
-  await agents.bind('stale', '/p', 'c2')
-  const old = new Date(Date.now() - agents.BINDING_TTL_MS - 60_000)
-  await utimes(path.join(projects.AGENTS_DIR, 'stale'), old, old)
-  await writeFile(path.join(projects.AGENTS_DIR, 'stale.transcript'), '{}')
-  await utimes(path.join(projects.AGENTS_DIR, 'stale.transcript'), old, old)
-  await agents.pruneBindings()
-  assert.deepEqual(await agents.bindingOf('fresh'), { root: '/p', comment: 'c1' })
-  assert.equal(await agents.bindingOf('stale'), undefined)
-  assert.equal(existsSync(path.join(projects.AGENTS_DIR, 'stale.transcript')), false)
-  t.after(() => agents.unbind('fresh'))
 })

@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "test:hooks": "claude plugin validate .claude-plugin/plugin.json && claude plugin test ."
   },
   "devDependencies": {
     "prettier": "3.9.9",

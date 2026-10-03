@@ -45,8 +45,8 @@ In scope, in this repository:
 - **The loader and the widget**: the loader must be removed from production
   builds by the bundler's dev flag, and the widget must not run script taken
   from comments or page content (XSS in the host app).
-- **The hooks and file locks** (`scripts/hook.mjs`, `scripts/lib/locks.mjs`):
-  bypassing a lock, or making a hook run a command it should not.
+- **The hooks and file locks** (`hooks/register.ts`): bypassing a lock, or
+  making a hook run a command it should not.
 - **Prompt injection**: text of the commented page or of a comment making an
   agent act outside the comment's intent or outside the project's `editable`
   folders.

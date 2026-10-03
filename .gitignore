@@ -7,6 +7,11 @@ node_modules/
 # stable branch users install from.
 skills/code-buddy/widget/dist/
 
+# The Claude Code API types and the tsconfig.json that reads them, written by
+# Claude Code when it loads the plugin from this folder.
+.claude-plugin/types/
+/tsconfig.json
+
 # Local state of a project using Code Buddy, and browser test output.
 .code-buddy/
 .playwright-mcp/

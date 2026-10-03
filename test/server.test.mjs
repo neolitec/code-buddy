@@ -41,6 +41,7 @@ before(async (t) => {
         ...process.env,
         CODE_BUDDY_PORT: String(port),
         CODE_BUDDY_STATE_DIR: await tempDir(t),
+        CODE_BUDDY_HOOKS: '1',
       },
       stdio: ['ignore', 'pipe', 'inherit'],
     },
@@ -126,9 +127,19 @@ test('a second server for the same project reports the port as busy', async () =
     process.execPath,
     [path.join(SCRIPTS, 'server.mjs'), '--project', root],
     {
-      env: { CODE_BUDDY_PORT: String(port) },
+      env: { CODE_BUDDY_PORT: String(port), CODE_BUDDY_HOOKS: '1' },
     },
   )
   assert.equal(second.code, 3)
   assert.match(second.stdout, /PORT_BUSY .* another .* session for this project/)
+})
+
+test("refuses to start when Claude Code did not load the plugin's hooks", async () => {
+  const started = await run(
+    process.execPath,
+    [path.join(SCRIPTS, 'server.mjs'), '--project', root],
+    { env: { CODE_BUDDY_PORT: String(await freePort()), CODE_BUDDY_HOOKS: '' } },
+  )
+  assert.equal(started.code, 2)
+  assert.match(started.stdout, /^HOOKS_MISSING .*Claude Code 2\.1\.287 or later/m)
 })
