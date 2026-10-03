@@ -64,7 +64,14 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     env.set(e.name, e.value)
     return { value: undefined }
   })
-  on('tool.call', () => ({ result: 'ok' }))
+  // claim.mjs prints the project it found, from the shell's directory.
+  on('tool.call', (_$, e) => {
+    const claimed =
+      e.tool === 'Bash' ? /claim\.mjs (\S+)/.exec(e.command)?.[1] : undefined
+    return claimed
+      ? { result: 'ok', text: `claimed ${claimed} (/) project=${ROOT}\n` }
+      : { result: 'ok' }
+  })
   on('turn.complete', () => ({ text: '' }))
   mock.env(on, { HOME: '/home/u' })
   const clock = mock.clock(on, { now: 1_000 })
@@ -253,4 +260,17 @@ test('locks files across the git repository, outside the project too', async ($,
   expect(ran.deny ?? ran.text).toMatch(
     /ssd_scanner\/x\.py is being changed by the agent of comment c1/,
   )
+})
+
+test('binds the project claim.mjs found, whatever --project says', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const cdThen = (script: string) =>
+    `cd ${ROOT} && node ${SCRIPTS}/${script} c1 --project . ; echo done`
+  await $.tool.call(bash('a1', cdThen('claim.mjs')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.progress('c1').map((step) => step.kind)).toEqual(['start', 'edit', 'edit'])
+
+  w.setComments([{ id: 'c1', status: 'resolved' }])
+  await $.tool.call(bash('a1', cdThen('resolve.mjs')))
+  expect(w.removed).toEqual([w.progressPath('c1')])
 })

@@ -39,9 +39,12 @@ const MAX_TEXT = 400
 
 const BUILD = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b|\b(?:next|vite)\s+build\b/
 const WORD = String.raw`[^\s;&|()<>]+`
-const CLAIM = new RegExp(String.raw`scripts/claim\.mjs\s+(${WORD})`)
-const RESOLVE = new RegExp(String.raw`scripts/(?:resolve|ask)\.mjs\s+(${WORD})`)
-const PROJECT = new RegExp(String.raw`--project\s+("[^"]+"|'[^']+'|${WORD})`)
+// The agent's scripts, called by any path (`$S/claim.mjs` too).
+const CLAIM = new RegExp(String.raw`\bclaim\.mjs\s+(${WORD})`)
+const RESOLVE = new RegExp(String.raw`\b(?:resolve|ask)\.mjs\s+(${WORD})`)
+// What claim.mjs prints: the project it found from the shell's directory,
+// which the hooks cannot see (`--project .` after a `cd`).
+const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*)$/m
 // A Bash command that writes files takes no lock: refused to an agent working
 // on a comment, which must use Edit or Write. Best effort, on the usual forms:
 // in-place editors, an inline script writing a file, cat or tee into one.
@@ -83,7 +86,6 @@ function relativeFrom(root: string, file: string) {
   while (shared < from.length && from[shared] === to[shared]) shared++
   return [...from.slice(shared).map(() => '..'), ...to.slice(shared)].join('/')
 }
-const unquote = (value: string) => value.replace(/^["']|["']$/g, '')
 const short = (text: string, max = 80) =>
   text.length > max ? `${text.slice(0, max - 1)}…` : text
 const clip = (text: string) => short(text.trim().replace(/\s+/g, ' '), MAX_TEXT)
@@ -333,8 +335,7 @@ async function setBinding($: $, agent: string, binding: Binding | undefined) {
   $.ui.status(count ? `code-buddy: ${count} agent(s) on comments` : undefined)
 }
 
-async function finish($: $, agent: string, root: string, comment: string) {
-  const project = await loadProject($, root)
+async function finish($: $, agent: string, project: Project, comment: string) {
   await setBinding($, agent, undefined)
   await releaseAll($, project, comment)
   const file = `${project.progressDir}/${comment}.jsonl`
@@ -345,31 +346,38 @@ async function finish($: $, agent: string, root: string, comment: string) {
 
 /**
  * claim.mjs binds the agent to its comment; resolve.mjs and ask.mjs end its
- * run. A failed chained command may still have run one: the comment's state
- * tells. Returns true when the run ended.
+ * run. A failed chained command may still have run one: its output and the
+ * comment's state tell. Returns true when the run ended.
  */
-async function followScripts($: $, agent: string, command: string) {
-  const root = command.match(PROJECT)?.[1]
-  if (!root) return false
-  let projectRoot = unquote(root)
-  if (!projectRoot.startsWith('/')) {
-    const stat = await $.fs.stat(projectRoot, { resolve: true }).catch(() => undefined)
-    if (!stat?.realPath) return false
-    projectRoot = stat.realPath
-  }
-  projectRoot = normalize(projectRoot)
-  const ended = command.match(RESOLVE)
-  if (ended?.[1]) {
-    const project = await loadProject($, projectRoot)
-    const active = await activeCommentIds($, project)
-    if (!active?.has(ended[1])) {
-      await finish($, agent, projectRoot, ended[1])
+async function followScripts($: $, agent: string, command: string, output: string) {
+  const ended = command.match(RESOLVE)?.[1]
+  const binding = await bindingOf($, agent)
+  if (ended && binding?.comment === ended) {
+    const project = await projectOf($, agent, binding)
+    const active = project && (await activeCommentIds($, project))
+    if (project && !active?.has(ended)) {
+      await finish($, agent, project, ended)
       return true
     }
   }
-  const claim = command.match(CLAIM)
-  if (claim?.[1]) await setBinding($, agent, { root: projectRoot, comment: claim[1] })
+  const claimed = CLAIMED.exec(output)
+  if (claimed?.[1] && claimed[2]) {
+    await setBinding($, agent, {
+      root: normalize(claimed[2].trim()),
+      comment: claimed[1],
+    })
+  }
   return false
+}
+
+/** The bound project, or undefined, unbinding the agent, when it cannot be read. */
+async function projectOf($: $, agent: string, binding: Binding) {
+  try {
+    return await loadProject($, binding.root)
+  } catch {
+    await setBinding($, agent, undefined)
+    return undefined
+  }
 }
 
 export const register: Register = (on) => {
@@ -389,8 +397,8 @@ export const register: Register = (on) => {
       if (typeof value === 'string') args[key] = value
     }
     const binding = await bindingOf($, agent)
-    if (binding) {
-      const project = await loadProject($, binding.root)
+    const project = binding && (await projectOf($, agent, binding))
+    if (binding && project) {
       const step = {
         at: Date.now(),
         id: e.tool_use_id,
@@ -422,31 +430,32 @@ export const register: Register = (on) => {
     if (ran.deny !== undefined) return ran
 
     const command = e.tool === 'Bash' ? (args.command ?? '') : ''
-    if (await followScripts($, agent, command)) return ran
+    if (await followScripts($, agent, command, ran.text ?? '')) return ran
     // Read again: claim.mjs may have just bound the agent.
     const bound = await bindingOf($, agent)
-    if (!bound) return ran
-    const project = await loadProject($, bound.root)
+    const boundProject = bound && (await projectOf($, agent, bound))
+    if (!bound || !boundProject) return ran
     // A failed build frees the build lock as a successful one does.
-    if (BUILD.test(command)) await unlock($, project, bound.comment, '@build')
+    if (BUILD.test(command)) await unlock($, boundProject, bound.comment, '@build')
     const step: Step = {
       at: Date.now(),
       id: e.tool_use_id,
-      ...describe(project, e.tool, args),
+      ...describe(boundProject, e.tool, args),
       state: ran.isError ? 'failed' : 'done',
     }
     if (ran.isError) step.error = short((ran.text ?? '').trim().split('\n')[0] ?? '', 160)
-    await record($, project, bound.comment, [step])
+    await record($, boundProject, bound.comment, [step])
     return ran
   })
 
-  // What hook.mjs read from the transcript file: the agent's thinking (often
-  // redacted, then an empty label) and the messages between its tool calls.
+  // The agent's thinking (often redacted, then an empty label) and the
+  // messages it writes between its tool calls.
   on('session.append', async ($, e, next) => {
     const stored = await next(e)
     if (!e.agentId || e.message.type !== 'assistant') return stored
     const binding = await bindingOf($, e.agentId)
-    if (!binding) return stored
+    const project = binding && (await projectOf($, e.agentId, binding))
+    if (!binding || !project) return stored
     const content: { type?: string; thinking?: string; text?: string }[] = Array.isArray(
       e.message.content,
     )
@@ -461,7 +470,7 @@ export const register: Register = (on) => {
         steps.push({ at, kind: 'message', label: clip(block.text) })
       }
     }
-    await record($, await loadProject($, binding.root), binding.comment, steps)
+    await record($, project, binding.comment, steps)
     return stored
   })
 
@@ -470,7 +479,8 @@ export const register: Register = (on) => {
   on('turn.complete', async ($, e, next) => {
     const binding = e.agentId ? await bindingOf($, e.agentId) : undefined
     if (e.agentId && binding) {
-      await releaseAll($, await loadProject($, binding.root), binding.comment)
+      const project = await projectOf($, e.agentId, binding)
+      if (project) await releaseAll($, project, binding.comment)
       await setBinding($, e.agentId, undefined)
     }
     return next(e)

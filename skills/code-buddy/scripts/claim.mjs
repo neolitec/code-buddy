@@ -23,7 +23,9 @@ try {
     found.claimedAt = new Date().toISOString()
     return found
   })
-  console.log(`claimed ${id} (${comment.route})`)
+  // The hooks bind the agent to this project: they cannot see the shell's
+  // directory a relative --project was resolved from.
+  console.log(`claimed ${id} (${comment.route}) project=${project.root}`)
 } catch (error) {
   if (!(error instanceof StoreRefusal)) throw error
   console.error(error.message)

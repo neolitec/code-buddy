@@ -29,6 +29,9 @@ released to the `stable` branch.
 
 ### Fixed
 
+- An agent that claimed its comment with a relative `--project` (`--project .`
+  after a `cd`) worked with no locks and no progress: the hooks now bind it to
+  the project `claim.mjs` found, which it prints.
 - Files outside the project (an `editable` folder such as `../api`) were
   never locked: the locks now cover the whole git repository the project is
   in, and the widget shows those files as `../api/…`.
