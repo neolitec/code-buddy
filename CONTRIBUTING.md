@@ -39,7 +39,8 @@ To try your changes in a real app, load the plugin from your clone; see
 | Path                                  | What                                                                |
 | ------------------------------------- | ------------------------------------------------------------------- |
 | `.claude-plugin/`                     | Plugin and marketplace manifests                                    |
-| `hooks/hooks.json`                    | The plugin's hooks: file locks and progress, in every agent         |
+| `hooks/register.ts`                   | The plugin's hooks, a Claude Code mod: file locks and progress, in every agent |
+| `types/index.d.ts`                    | The values the hooks keep for the session (`$.state`)               |
 | `skills/code-buddy/SKILL.md`          | The skill Claude reads: modes, agent prompts                        |
 | `skills/code-buddy/scripts/`          | Node.js scripts (ES modules, JSDoc types), run by the skill         |
 | `skills/code-buddy/widget/src/`       | The browser widget (React, TypeScript)                              |
@@ -62,7 +63,15 @@ It runs, in order:
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
 | `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
-| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, transcript, store, hooks, server, widget wording |
+| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording |
+
+`npm run test:hooks` checks the hooks module with Claude Code itself
+(`claude plugin validate`, then `claude plugin test` on `test/hooks.test.ts`).
+It needs Claude Code 2.1.287 or later, which CI does not install: run it
+whenever you change `hooks/` or `types/`. To type-check the module, load the
+plugin once (`claude --plugin-dir .`): Claude Code writes its API types to
+`.claude-plugin/types/` and a `tsconfig.json` that reads them (both
+git-ignored), and `npx tsc -p .` then checks `hooks/` and `types/`.
 
 Rules that go with them:
 
@@ -70,9 +79,10 @@ Rules that go with them:
   `main`: build it locally to try your changes, and let the Release workflow
   publish it on the `stable` branch.
 - **Behavior changes come with tests.** A bug fix starts with a test that
-  fails without it. The tests run the scripts as Claude Code does (hook
-  events on stdin, a real server on a free port) in throwaway folders; they
-  need no network and no Claude Code.
+  fails without it. The `node:test` suites run the scripts as Claude Code
+  does (a real server on a free port) in throwaway folders; they need no
+  network and no Claude Code. The hooks' tests run inside Claude Code, with
+  the disk and the tools beneath them in memory.
 - **Scripts are plain JavaScript with JSDoc types**, type-checked by TypeScript.
   Add types where the checker needs them rather than silencing it.
 - **Lint exceptions are rare and explained.** Disable a rule for one line only,

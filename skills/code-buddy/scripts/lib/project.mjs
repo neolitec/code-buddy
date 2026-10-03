@@ -12,12 +12,10 @@ export const SKILL_DIR = path.resolve(
 export const WIDGET_VERSION = 1
 
 // Not os.tmpdir(): hooks, sandboxed shells and the server may each see a different TMPDIR.
+// hooks/register.ts finds the same folder, and the progress files in it, the same way.
 const STATE_ROOT =
   process.env.CODE_BUDDY_STATE_DIR ??
   path.join(process.env.XDG_CACHE_HOME ?? path.join(os.homedir(), '.cache'), 'code-buddy')
-
-/** Global, project-independent state: which agent works on which comment. */
-export const AGENTS_DIR = path.join(STATE_ROOT, 'agents')
 
 /**
  * The project a script acts on: `--project <dir>`, else CODE_BUDDY_PROJECT, else the
@@ -48,7 +46,6 @@ export function project(root) {
         config.commentsFile ??
         '.code-buddy/comments.json',
     ),
-    locksDir: path.join(state, 'locks'),
     progressDir: path.join(state, 'progress'),
   }
 }

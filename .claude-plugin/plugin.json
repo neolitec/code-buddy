@@ -9,5 +9,6 @@
   "repository": "https://github.com/neolitec/code-buddy",
   "homepage": "https://github.com/neolitec/code-buddy#readme",
   "license": "MIT",
-  "keywords": ["feedback", "review", "frontend", "browser", "widget"]
+  "keywords": ["feedback", "review", "frontend", "browser", "widget"],
+  "types": "./types/index.d.ts"
 }

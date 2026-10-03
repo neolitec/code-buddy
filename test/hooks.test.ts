@@ -1,0 +1,220 @@
+// The hooks module (hooks/register.ts), run by `claude plugin test .` against
+// Claude Code itself: the disk, processes and tools beneath it are in memory.
+import { expect, mock, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+const ROOT = '/p'
+const SCRIPTS = '/s/scripts'
+const claim = (id: string) => `node ${SCRIPTS}/claim.mjs ${id} --project ${ROOT}`
+const resolveCmd = (id: string) =>
+  `node ${SCRIPTS}/resolve.mjs ${id} --project ${ROOT} "done"`
+
+type Comment = { id: string; status: string; cancelledAt?: string; askedAt?: string }
+
+/** The disk, processes and tools beneath the mod, in memory. */
+function world(on: On, comments: Comment[]) {
+  const files = new Map<string, string>([
+    [
+      `${ROOT}/.code-buddy.json`,
+      JSON.stringify({ commentsFile: '.code-buddy/comments.json' }),
+    ],
+    [`${ROOT}/.code-buddy/comments.json`, JSON.stringify(comments)],
+  ])
+  const removed: string[] = []
+  on('fs.read', (_$, e) => {
+    const text = files.get(e.path)
+    if (text === undefined) throw new Error(`ENOENT ${e.path}`)
+    return { value: text }
+  })
+  on('fs.write', (_$, e) => {
+    files.set(e.path, e.text)
+    return { value: undefined }
+  })
+  on('process.run', (_$, e) => {
+    if (e.argv[0] === 'rm') {
+      const file = e.argv[e.argv.length - 1] ?? ''
+      removed.push(file)
+      files.delete(file)
+    }
+    return {
+      value: {
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        isStdoutTruncated: false,
+        isStderrTruncated: false,
+      },
+    }
+  })
+  on('ui.status', () => ({ value: undefined }))
+  const env = new Map<string, string | undefined>()
+  on('env.set', (_$, e) => {
+    env.set(e.name, e.value)
+    return { value: undefined }
+  })
+  on('tool.call', () => ({ result: 'ok' }))
+  on('turn.complete', () => ({ text: '' }))
+  mock.env(on, { HOME: '/home/u' })
+  const clock = mock.clock(on, { now: 1_000 })
+
+  const progressPath = (id: string) =>
+    [...files.keys(), ...removed].find((path) => path.endsWith(`/progress/${id}.jsonl`))
+  return {
+    env,
+    clock,
+    removed,
+    setComments: (next: Comment[]) =>
+      files.set(`${ROOT}/.code-buddy/comments.json`, JSON.stringify(next)),
+    progressPath,
+    progress: (id: string) =>
+      (files.get(progressPath(id) ?? '') ?? '')
+        .split('\n')
+        .filter(Boolean)
+        .map((line): Record<string, unknown> => JSON.parse(line)),
+  }
+}
+
+let ids = 0
+const bash = (agentId: string, command: string) => ({
+  tool: 'Bash' as const,
+  command,
+  tool_use_id: `t${++ids}`,
+  agentId,
+})
+const edit = (agentId: string, file: string) => ({
+  tool: 'Edit' as const,
+  file_path: file,
+  old_string: 'a',
+  new_string: 'b',
+  tool_use_id: `t${++ids}`,
+  agentId,
+})
+
+test('a claimed run records its steps and cleans up on resolve', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+
+  expect(w.progress('c1')).toEqual([
+    expect.objectContaining({ kind: 'start', label: 'Started', state: 'done' }),
+    expect.objectContaining({ kind: 'edit', label: 'src/App.tsx', state: 'running' }),
+    expect.objectContaining({ kind: 'edit', label: 'src/App.tsx', state: 'done' }),
+  ])
+  expect(w.progressPath('c1')).toMatch(
+    /^\/home\/u\/\.cache\/code-buddy\/[0-9a-f]{12}\/progress\/c1\.jsonl$/,
+  )
+
+  w.setComments([{ id: 'c1', status: 'resolved' }])
+  await $.tool.call(bash('a1', resolveCmd('c1')))
+  expect(w.removed).toEqual([w.progressPath('c1')])
+
+  // Unbound now: further calls record nothing.
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.progress('c1')).toEqual([])
+})
+
+test('an unbound agent is left alone', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const ran = await $.tool.call(edit('other', `${ROOT}/src/App.tsx`))
+  expect(ran.deny).toBeUndefined()
+  expect(w.progressPath('c1')).toBeUndefined()
+})
+
+// session.append is not covered here: the kit refuses a test hook that
+// answers a row without next, and nothing beneath answers it either. It is
+// checked live, with a real subagent.
+
+test("a file another comment's agent holds is refused after the wait", async ($, on) => {
+  const w = world(on, [
+    { id: 'c1', status: 'open' },
+    { id: 'c2', status: 'open' },
+  ])
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(bash('a2', claim('c2')))
+  await $.tool.call(edit('a2', `${ROOT}/src/Other.tsx`))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+
+  const blocked = $.tool.call(edit('a2', `${ROOT}/src/App.tsx`))
+  for (let i = 0; i < 40; i++) await w.clock.advance(200)
+  const ran = await blocked
+
+  expect(ran.deny ?? ran.text).toMatch(
+    /src\/App\.tsx is being changed by the agent of comment c1/,
+  )
+  expect(ran.deny ?? ran.text).toMatch(/Your 1 lock\(s\) were released/)
+  expect(w.progress('c2').at(-1)).toEqual(expect.objectContaining({ state: 'failed' }))
+
+  // a2 released src/Other.tsx: a1 takes it at once.
+  expect((await $.tool.call(edit('a1', `${ROOT}/src/Other.tsx`))).deny).toBeUndefined()
+})
+
+test('a lock frees once its subagent ends its turn', async ($, on) => {
+  const w = world(on, [
+    { id: 'c1', status: 'open' },
+    { id: 'c2', status: 'open' },
+  ])
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(bash('a2', claim('c2')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+
+  await $.turn.complete({
+    answer: '',
+    durationMs: 1,
+    isAborted: false,
+    turnId: 'turn',
+    agentId: 'a1',
+    reason: 'answer',
+  })
+
+  expect((await $.tool.call(edit('a2', `${ROOT}/src/App.tsx`))).deny).toBeUndefined()
+  void w
+})
+
+test('an agent whose comment the reader cancelled is told to stop', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  w.setComments([{ id: 'c1', status: 'open', cancelledAt: '2026-10-02' }])
+
+  const ran = await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(ran.deny ?? ran.text).toMatch(/reply "CANCELLED"/)
+})
+
+test('tells the server, through the environment, that the hooks are loaded', async ($, on) => {
+  const w = world(on, [])
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  expect(w.env.get('CODE_BUDDY_HOOKS')).toBe('1')
+})
+
+test('refuses an agent a Bash command that writes files, which no lock covers', async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  const writes = [
+    `python3 - <<'EOF'\np='src/a.ts'\nopen(p, 'w').write('x')\nEOF`,
+    `python3 -c "import pathlib; pathlib.Path('src/a.ts').write_text('x')"`,
+    `node -e "require('fs').writeFileSync('src/a.ts', 'x')"`,
+    `sed -i '' 's/a/b/' src/a.ts`,
+    `perl -pi -e 's/a/b/' src/a.ts`,
+    `cat > src/a.ts <<'EOF'\nx\nEOF`,
+    `echo x | tee src/a.ts`,
+  ]
+  for (const command of writes) {
+    const ran = await $.tool.call(bash('a1', command))
+    expect(ran.deny ?? ran.text).toMatch(/Edit or Write tool/)
+  }
+  expect(w.progress('c1').at(-1)).toEqual(expect.objectContaining({ state: 'failed' }))
+  for (const command of ['npm test 2>&1 | tail -20', `sed -n '1,20p' src/a.ts`]) {
+    expect((await $.tool.call(bash('a1', command))).deny).toBeUndefined()
+  }
+  // Its answer passes, whatever it quotes.
+  const answer = `node ${SCRIPTS}/resolve.mjs c1 --project ${ROOT} <<'EOF'\nNo more open(p, 'w').\nEOF`
+  expect((await $.tool.call(bash('a1', answer))).deny).toBeUndefined()
+})
+
+test('leaves Bash alone for an agent that claimed no comment', async ($, on) => {
+  world(on, [])
+  expect(
+    (await $.tool.call(bash('free', `sed -i '' 's/a/b/' a.ts`))).deny,
+  ).toBeUndefined()
+})

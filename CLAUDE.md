@@ -7,9 +7,11 @@ browser, and one background agent per comment makes the change. See the
 ## Layout
 
 - `.claude-plugin/`: plugin and marketplace manifests.
-- `hooks/hooks.json`: the plugin's hooks, which run in every session and
-  subagent (a skill's own hooks never fire in subagents). They go through
-  `scripts/hook.sh`, which skips Node unless an agent works on a comment.
+- `hooks/register.ts`: the plugin's hooks, a Claude Code mod (2.1.287 or
+  later) declared in `hooks/hooks.json`. They run in every session and
+  subagent (a skill's own hooks never fire in subagents) and act only for an
+  agent working on a comment. Their `$.state` values are typed in
+  `types/index.d.ts`.
 - `skills/code-buddy/SKILL.md`: the skill itself, a prompt. Keep it short:
   every line is read in every user's session.
 - `skills/code-buddy/scripts/`: Node.js ES modules with JSDoc types, no
@@ -23,6 +25,8 @@ browser, and one background agent per comment makes the change. See the
 - `npm ci`: install (install scripts are disabled).
 - `npm run check`: format check, lint, type-check, build and tests; must pass.
 - `npm test`: the `node:test` suites in `test/` (they need the widget built).
+- `npm run test:hooks`: validate the plugin and run `test/hooks.test.ts` in
+  Claude Code (2.1.287 or later; not in CI, run it when `hooks/` changes).
 - `npm run format`: apply Prettier.
 - `npm run build`: rebuild `widget/dist/` (the bundle and its third-party
   licenses).
