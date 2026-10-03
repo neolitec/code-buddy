@@ -4,6 +4,7 @@
 // with claim.mjs. For one that has, it takes the file locks and records each
 // step for the widget: tools as they start, end or fail, and the thinking and
 // messages read from the agent's transcript.
+import { appendFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import {
   appendProgress,
@@ -15,7 +16,7 @@ import {
   unbind,
 } from './lib/agents.mjs'
 import { createLocks } from './lib/locks.mjs'
-import { project as loadProject } from './lib/project.mjs'
+import { AGENTS_DIR, project as loadProject } from './lib/project.mjs'
 import {
   followTranscript,
   forgetTranscript,
@@ -31,7 +32,32 @@ const WORD = String.raw`[^\s;&|()<>]+`
 const CLAIM = new RegExp(String.raw`scripts/claim\.mjs\s+(${WORD})`)
 // A question ends the run as an answer does: ask.mjs files the steps itself.
 const RESOLVE = new RegExp(String.raw`scripts/(?:resolve|ask)\.mjs\s+(${WORD})`)
+// A Bash command that writes files takes no lock: refused to an agent working
+// on a comment, which must use Edit or Write. Best effort, on the usual forms:
+// in-place editors, an inline script writing a file, cat or tee into one.
+const BASH_WRITES = [
+  /\b(?:sed|perl)\s+(?:-\S+\s+)*-[\w-]*i/,
+  /\bopen\([^)]*,\s*['"][wax]b?\+?['"]/,
+  /\.write_(?:text|bytes)\(/,
+  /\b(?:writeFile|appendFile)(?:Sync)?\s*\(/,
+  /\bcat\s*>/,
+  /\btee\b/,
+]
 const PROJECT = new RegExp(String.raw`--project\s+("[^"]+"|'[^']+'|${WORD})`)
+
+// Debugging: `touch <state>/debug` logs what the hook decides to <state>/hook.log.
+const STATE_DIR = path.dirname(AGENTS_DIR)
+const DEBUG = existsSync(path.join(STATE_DIR, 'debug'))
+/** @type {string} */
+let debugPrefix = ''
+/** @param {string} message */
+function debug(message) {
+  if (!DEBUG) return
+  appendFileSync(
+    path.join(STATE_DIR, 'hook.log'),
+    `${new Date().toISOString()} mjs ${debugPrefix}: ${message}\n`,
+  )
+}
 
 async function readInput() {
   let raw = ''
@@ -50,6 +76,12 @@ function writeTarget(tool, input) {
   if (tool === 'Bash' && BUILD.test(input.command ?? '')) return '@build'
   return undefined
 }
+
+/** The agent's own scripts pass: an answer may quote anything. */
+const writesFromBash = (command) =>
+  !CLAIM.test(command) &&
+  !RESOLVE.test(command) &&
+  BASH_WRITES.some((pattern) => pattern.test(command))
 
 function describe(root, tool, input) {
   const repoPath = (file) => {
@@ -120,16 +152,40 @@ function transcriptOf(input) {
  */
 async function record(agent, project, comment, step) {
   const active = await createLocks(project).activeCommentIds()
-  if (active && !active.has(comment)) return
+  if (active && !active.has(comment)) {
+    debug(`record skipped: comment ${comment} is not active`)
+    return
+  }
   await touchBinding(agent)
-  await appendProgress(project, comment, ...(await newTranscriptSteps(agent)), step)
+  const narration = await newTranscriptSteps(agent)
+  await appendProgress(project, comment, ...narration, step)
+  debug(
+    `recorded ${step.kind} ${step.state} "${step.label}" + ${narration.length} transcript step(s) for ${comment}`,
+  )
 }
 
 async function preToolUse(agent, tool, input, toolUseId) {
   const binding = await bindingOf(agent)
-  if (!binding) return
+  if (!binding) {
+    debug('not bound: nothing to do')
+    return
+  }
   const project = loadProject(binding.root)
   const step = { at: Date.now(), id: toolUseId, ...describe(project.root, tool, input) }
+  const command = tool === 'Bash' ? (input.command ?? '') : ''
+  if (writesFromBash(command)) {
+    debug('denied: the Bash command writes files')
+    await record(agent, project, binding.comment, {
+      ...step,
+      state: 'failed',
+      error: 'writes files from Bash; use Edit or Write',
+    })
+    process.stderr.write(
+      'This command writes files from Bash, where Code Buddy cannot lock them against ' +
+        "the other comments' agents. Make the change with the Edit or Write tool instead.\n",
+    )
+    process.exit(2)
+  }
   const target = writeTarget(tool, input)
   if (target) await lockTarget(agent, project, binding, target, step)
   await record(agent, project, binding.comment, { ...step, state: 'running' })
@@ -139,6 +195,7 @@ async function lockTarget(agent, project, binding, target, step) {
   const locks = createLocks(project)
   const active = await locks.activeCommentIds()
   if (active && !active.has(binding.comment)) {
+    debug(`denied ${target}: comment ${binding.comment} is no longer active`)
     process.stderr.write(
       `Comment ${binding.comment} was cancelled, resolved or deleted by the reader. Stop now: make no further changes and reply "CANCELLED".\n`,
     )
@@ -148,10 +205,17 @@ async function lockTarget(agent, project, binding, target, step) {
   try {
     relative = locks.relativeTarget(target)
   } catch {
+    debug(`no lock: ${target} is outside the project`)
     return
   }
   const result = await locks.acquire(binding.comment, [relative], LOCK_TIMEOUT_S)
-  if (result.ok) return
+  if (result.ok) {
+    debug(`locked ${relative} for ${binding.comment}`)
+    return
+  }
+  debug(
+    `denied ${relative}: held by ${result.holder}; released ${result.released.length} lock(s) of ${binding.comment}`,
+  )
   await record(agent, project, binding.comment, {
     ...step,
     state: 'failed',
@@ -166,6 +230,7 @@ async function lockTarget(agent, project, binding, target, step) {
 }
 
 async function finish(agent, root, comment) {
+  debug(`run ended for ${comment}: unbound, locks released, progress dropped`)
   const project = loadProject(root)
   await unbind(agent)
   await forgetTranscript(agent)
@@ -197,6 +262,7 @@ async function followScripts(agent, command, transcript) {
   if (claim) {
     await pruneBindings()
     await bind(agent, projectRoot, claim[1])
+    debug(`bound to comment ${claim[1]} in ${projectRoot}, transcript ${transcript}`)
     await followTranscript(agent, transcript)
   }
   return false
@@ -245,6 +311,7 @@ async function postToolUseFailure(agent, tool, input, toolUseId, error, transcri
 
 const input = await readInput()
 const agent = input.agent_id ?? `session-${input.session_id}`
+debugPrefix = `${input.hook_event_name} ${input.tool_name ?? ''} agent=${agent}`
 const transcript = transcriptOf(input)
 const tool = input.tool_name
 const toolInput = input.tool_input ?? {}
@@ -269,12 +336,16 @@ try {
     // its comment again. An unbound agent also lets hook.sh skip Node.
     const binding = await bindingOf(input.agent_id)
     if (binding) {
-      await createLocks(loadProject(binding.root)).releaseAll(binding.comment)
-    }
+      const released = await createLocks(loadProject(binding.root)).releaseAll(
+        binding.comment,
+      )
+      debug(`subagent stopped: released ${released.length} lock(s) of ${binding.comment}`)
+    } else debug('subagent stopped: was not bound')
     await unbind(input.agent_id)
     await forgetTranscript(input.agent_id)
   }
 } catch (error) {
+  debug(`error: ${error instanceof Error ? error.stack : String(error)}`)
   process.stderr.write(
     `code-buddy hook: ${error instanceof Error ? error.message : String(error)}\n`,
   )

@@ -9,6 +9,9 @@ released to the `stable` branch.
 
 ### Added
 
+- `touch ~/.cache/code-buddy/debug` logs every hook call and what it decided
+  to `~/.cache/code-buddy/hook.log`, to check the hooks in a real session.
+
 - Claude can ask the reader a question in the thread (`ask.mjs`) instead of
   guessing; the comment waits on the reader's answer.
 
@@ -28,6 +31,12 @@ released to the `stable` branch.
 - Tools called in parallel recorded the agent's thinking and messages twice.
 - A claim or an answer chained with a command that failed was ignored: the
   agent worked without file locks, or kept its locks after answering.
+- An agent could write files from Bash (`sed -i`, an inline Python or Node
+  script, `cat >`, `tee`), where no lock covers them: agents edited the same
+  file at once. The hook now refuses those commands to an agent working on a
+  comment and asks for Edit or Write, and the agent's prompt says so.
+- Starting an agent started Node twice for nothing: its prompt quotes the
+  claim command.
 - A binding left by a killed agent made every Claude Code session start Node
   for each tool call; bindings silent for two hours are now ignored and pruned.
 - Two processes could break the same abandoned lock on the comments file and

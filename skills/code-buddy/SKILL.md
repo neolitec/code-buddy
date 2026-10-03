@@ -98,9 +98,11 @@ answer to the same subagent.
 >    `cancellation` field lists files an earlier, stopped agent left changed:
 >    keep, finish or revert them to match the current text. When the element
 >    is unclear, screenshot it with Playwright on `<devUrl>`.
-> 3. Make the change, only under `<editable>`. Other agents may edit the
->    project at the same time: a hook locks every file you write and blocks an
->    edit, with an explanation, when another comment's agent holds the file.
+> 3. Make the change, only under `<editable>`, with the Edit and Write tools:
+>    never write files from Bash (`sed -i`, scripts, redirections). Other
+>    agents may edit the project at the same time: a hook locks every file you
+>    write and blocks an edit, with an explanation, when another comment's
+>    agent holds the file.
 >    Then re-read the files you are changing and retry. If the hook says the
 >    reader cancelled the comment, stop at once and reply `CANCELLED`.
 > 4. Run `<checks>`, and `<build>` when a component or a dependency changed.

@@ -155,6 +155,21 @@ packages it bundles) is never committed on `main`: the Release workflow builds
 it and publishes it on the `stable` branch. See [CONTRIBUTING.md](CONTRIBUTING.md)
 for the rest of the rules.
 
+To check what the hooks do in a real session, turn on their log, then follow
+it while an agent works on a comment:
+
+```sh
+touch ~/.cache/code-buddy/debug     # rm it to turn the log off
+tail -f ~/.cache/code-buddy/hook.log
+```
+
+`hook.sh` writes one `sh` line per call: the event, the tool, the agent, and
+`skip` when it exits without starting Node. No `sh` line at all means the
+plugin's hooks are not loaded. `hook.mjs` writes one `mjs` line per decision:
+the agent bound to its comment, a lock taken or refused, a step recorded, the
+run ended, an error. The log grows with every tool call of every session while
+it is on. It follows `CODE_BUDDY_STATE_DIR` or `XDG_CACHE_HOME` when set.
+
 Paths below are relative to `skills/code-buddy/`.
 
 | Path | What |

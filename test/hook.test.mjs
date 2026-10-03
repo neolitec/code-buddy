@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { before, test } from 'node:test'
 import { SCRIPTS, run, tempDir, tempProject } from './helpers.mjs'
@@ -243,4 +243,61 @@ test("reads a subagent's messages from its own transcript", async (t) => {
       ['search', 'h1'],
     ],
   )
+})
+
+test('refuses a claimed agent a Bash command that writes files, which no lock covers', async (t) => {
+  const { root, claimCommand } = await setUp(t)
+  await bash('agent-w', 'PostToolUse', claimCommand)
+  const writes = [
+    `python3 - <<'EOF'\np='src/a.ts'\ns=open(p).read()\nopen(p, 'w').write(s.replace('a', 'b'))\nEOF`,
+    `python3 -c "import pathlib; pathlib.Path('src/a.ts').write_text('x')"`,
+    `node -e "require('fs').writeFileSync('src/a.ts', 'x')"`,
+    `sed -i '' 's/a/b/' ${root}/src/a.ts`,
+    `perl -pi -e 's/a/b/' src/a.ts`,
+    `cat > src/a.ts <<'EOF'\nx\nEOF`,
+    `echo x | tee src/a.ts`,
+  ]
+  for (const command of writes) {
+    const result = await bash('agent-w', 'PreToolUse', command)
+    assert.equal(result.code, 2, command)
+    assert.match(result.stderr, /Edit or Write tool/, command)
+  }
+  const reads = [
+    'npm test 2>&1 | tail -20',
+    `grep -n "open(" ${root}/src/a.ts > /dev/null`,
+    `sed -n '1,20p' src/a.ts`,
+  ]
+  for (const command of reads) {
+    assert.equal((await bash('agent-w', 'PreToolUse', command)).code, 0, command)
+  }
+})
+
+test("lets an agent's answer through, whatever its text says", async (t) => {
+  const { root, comment, claimCommand } = await setUp(t)
+  await bash('agent-r', 'PostToolUse', claimCommand)
+  const answer = `node ${SCRIPTS}resolve.mjs ${comment.id} --project ${root} <<'EOF'\nReplaced open(p, 'w') and sed -i with Edit.\nEOF`
+  assert.equal((await bash('agent-r', 'PreToolUse', answer)).code, 0)
+})
+
+test('leaves Bash alone for an agent that claimed no comment', async () => {
+  assert.equal(
+    (await bash('agent-free', 'PreToolUse', `sed -i '' 's/a/b/' a.ts`)).code,
+    0,
+  )
+})
+
+test('logs its decisions when debugging is on', async (t) => {
+  const state = await tempDir(t)
+  await writeFile(path.join(state, 'debug'), '')
+  await hook(
+    {
+      hook_event_name: 'PreToolUse',
+      agent_id: 'agent-d',
+      tool_name: 'Read',
+      tool_input: {},
+    },
+    { CODE_BUDDY_STATE_DIR: state },
+  )
+  const log = await readFile(path.join(state, 'hook.log'), 'utf8')
+  assert.match(log, / mjs PreToolUse Read agent=agent-d: not bound: nothing to do\n$/)
 })

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { chmod, mkdir, utimes, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { test } from 'node:test'
 import { SCRIPTS, run, tempDir } from './helpers.mjs'
@@ -23,7 +23,7 @@ async function setUp(t) {
       input: JSON.stringify(input),
       env: { PATH: `${bin}:${process.env.PATH}`, CODE_BUDDY_STATE_DIR: state },
     })
-  return { hookSh, mark, agents: path.join(state, 'agents') }
+  return { hookSh, mark, state, agents: path.join(state, 'agents') }
 }
 
 const readEvent = {
@@ -63,4 +63,24 @@ test('ignores a binding left by an agent killed hours ago', async (t) => {
   await utimes(file, old, old)
   await hookSh(readEvent)
   assert.equal(existsSync(mark), false)
+})
+
+test('does not start Node for a prompt that only mentions the claim script', async (t) => {
+  const { hookSh, mark } = await setUp(t)
+  await hookSh({
+    hook_event_name: 'PreToolUse',
+    tool_name: 'Agent',
+    tool_input: { prompt: 'Claim it: `node /x/scripts/claim.mjs abc --project /p`.' },
+  })
+  assert.equal(existsSync(mark), false)
+})
+
+test('logs each call when debugging is on, and only then', async (t) => {
+  const { hookSh, state } = await setUp(t)
+  await hookSh(readEvent)
+  assert.equal(existsSync(path.join(state, 'hook.log')), false)
+  await writeFile(path.join(state, 'debug'), '')
+  await hookSh({ ...readEvent, agent_id: 'agent-9' })
+  const log = await readFile(path.join(state, 'hook.log'), 'utf8')
+  assert.match(log, /^\S+ sh {2}PostToolUse Read agent=agent-9 pid=\d+: skip\n$/)
 })
