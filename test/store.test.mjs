@@ -105,6 +105,20 @@ test('a multiple-choice question takes several options, in their order', async (
   assert.equal(answered.messages.at(-1).body, 'Grid, Table')
 })
 
+test("the reader's new words, sent again, drop the options they had chosen", async (t) => {
+  const { comments, comment } = await setUp(t)
+  await comments.answer(comment.id, 'Which layout?', { question: true, options: LAYOUTS })
+  await comments.update(comment.id, { choices: ['Grid'] })
+  await comments.update(comment.id, { cancelled: true })
+  const resent = await comments.update(comment.id, {
+    text: 'List please',
+    cancelled: false,
+  })
+  const last = resent.messages.at(-1)
+  assert.equal(last.body, 'List please')
+  assert.equal(last.choices, undefined)
+})
+
 test('choices outside a question with options are ignored', async (t) => {
   const { comments, comment } = await setUp(t)
   await comments.answer(comment.id, 'Which blue?', { question: true })

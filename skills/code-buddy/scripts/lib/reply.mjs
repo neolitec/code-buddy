@@ -14,8 +14,9 @@ async function readStdin() {
 
 /**
  * A question's arguments: its options, `--option "<label>: <description>"`
- * each (the description is optional), and `--multiple`.
- * @returns {{ args: string[], options: { label: string, description?: string }[], multiple: boolean } | undefined}
+ * each (the description is optional), and `--multiple`; or what is wrong
+ * with them.
+ * @returns {{ problem: string } | { project?: string, args: string[], options: { label: string, description?: string }[], multiple: boolean }}
  */
 function questionArgs() {
   let parsed
@@ -28,8 +29,9 @@ function questionArgs() {
         multiple: { type: 'boolean' },
       },
     })
-  } catch {
-    return undefined
+  } catch (error) {
+    // Its message says how to pass a text starting with "-".
+    return { problem: error instanceof Error ? error.message : String(error) }
   }
   const { values, positionals } = parsed
   const options = (values.option ?? []).map((option) => {
@@ -44,14 +46,21 @@ function questionArgs() {
       : { label: label.slice(0, MAX_LABEL) }
   })
   const labels = new Set(options.map((option) => option.label))
-  const valid =
-    options.length === 0 ||
-    (options.length >= 2 &&
-      options.length <= MAX_OPTIONS &&
-      labels.size === options.length &&
-      !labels.has(''))
-  if (!valid || (values.multiple && !options.length)) return undefined
-  return { args: positionals, options, multiple: values.multiple ?? false }
+  if (values.multiple && !options.length) {
+    return { problem: '--multiple needs options' }
+  }
+  if (options.length === 1 || options.length > MAX_OPTIONS) {
+    return { problem: `a question offers 2 to ${MAX_OPTIONS} options` }
+  }
+  if (labels.size !== options.length || labels.has('')) {
+    return { problem: 'each option needs its own label' }
+  }
+  return {
+    project: values.project,
+    args: positionals,
+    options,
+    multiple: values.multiple ?? false,
+  }
 }
 
 /**
@@ -60,11 +69,19 @@ function questionArgs() {
  */
 export async function reply(script, { question }) {
   const asked = question ? questionArgs() : undefined
-  const [id, bodyArg] = question ? (asked?.args ?? []) : positional()
-  const project = findProject()
-  const body = (bodyArg ?? (process.stdin.isTTY ? '' : await readStdin())).trim()
+  const problem = asked && 'problem' in asked ? asked.problem : undefined
+  const parsed = asked && !('problem' in asked) ? asked : undefined
+  const [id, bodyArg] = parsed ? parsed.args : question ? [] : positional()
+  // From the parsed arguments: `--project=<dir>` is one of them.
+  const project = parsed
+    ? findProject(parsed.project === undefined ? [] : ['--project', parsed.project])
+    : findProject()
+  const body = problem
+    ? ''
+    : (bodyArg ?? (process.stdin.isTTY ? '' : await readStdin())).trim()
   const what = question ? 'question' : 'answer'
-  if (!id || !project || !body || (question && !asked)) {
+  if (!id || !project || !body) {
+    if (problem) console.error(`${script}: ${problem}`)
     console.error(
       question
         ? `usage: ${script} <id> --project <dir> "<question>" (or the question on stdin)\n` +
@@ -76,8 +93,8 @@ export async function reply(script, { question }) {
   try {
     const comment = await createStore(project).answer(id, body, {
       question,
-      options: asked?.options,
-      multiple: asked?.multiple,
+      options: parsed?.options,
+      multiple: parsed?.multiple,
     })
     console.log(`${question ? 'asked' : 'resolved'} ${id} (${comment.route})`)
   } catch (error) {

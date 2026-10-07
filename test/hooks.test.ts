@@ -258,8 +258,9 @@ test("sends an agent's AskUserQuestion to the comment's thread", async ($, on) =
   const w = world(on, [{ id: 'c1', status: 'open' }])
   await $.tool.call(bash('a1', claim('c1')))
   const ran = await $.tool.call(askUser('a1'))
-  expect(ran.deny).toMatch(
-    /ask\.mjs c1 --project \/repo\/web "<question>" --option "<label>: <description>"/,
+  // The script the agent claimed with, and the project quoted: a path may hold a space.
+  expect(ran.deny).toContain(
+    `node "${SCRIPTS}/ask.mjs" c1 --project "${ROOT}" "<question>" --option "<label>: <description>"`,
   )
   // Not a step the reader sees.
   expect(w.progress('c1').map((step) => step.kind)).toEqual(['start'])

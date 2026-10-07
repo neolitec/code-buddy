@@ -41,6 +41,8 @@ const BUILD = /\b(?:pnpm|npm|yarn|bun)\s+(?:run\s+)?build\b|\b(?:next|vite)\s+bu
 const WORD = String.raw`[^\s;&|()<>]+`
 // The agent's scripts, called by any path (`$S/claim.mjs` too).
 const CLAIM = new RegExp(String.raw`\bclaim\.mjs\s+(${WORD})`)
+// The folder claim.mjs was run from, when the command gives it in full.
+const SCRIPTS_DIR = /(\/[^\s;&|()<>'"]*\/)claim\.mjs\b/
 const RESOLVE = new RegExp(String.raw`\b(?:resolve|ask)\.mjs\s+(${WORD})`)
 // What claim.mjs prints: the project it found from the shell's directory,
 // which the hooks cannot see (`--project .` after a `cd`).
@@ -294,9 +296,10 @@ async function record(
  * AskUserQuestion would reach the manager's terminal, never the reader, who is
  * on the page: the agent asks in the comment's thread instead.
  */
-const askInThread = ({ root, comment }: Binding) =>
+const askInThread = ({ root, comment, scripts }: Binding) =>
   'The reader answers in the browser, where AskUserQuestion never shows. Ask in ' +
-  `the comment's thread instead: node <skill>/scripts/ask.mjs ${comment} --project ${root} ` +
+  `the comment's thread instead: node ${JSON.stringify(`${scripts ?? 'SKILL/scripts/'}ask.mjs`)} ` +
+  `${comment} --project ${JSON.stringify(root)} ` +
   '"<question>" --option "<label>: <description>" --option "…" (2 to 6 options; ' +
   'add --multiple to let the reader pick several), then reply "QUESTION: <your question>".'
 
@@ -528,7 +531,8 @@ async function followScripts($: $, agent: string, command: string, output: strin
   const claimed = CLAIMED.exec(output)
   if (claimed?.[1] && claimed[2]) {
     const root = normalize(claimed[2].trim())
-    await setBinding($, agent, { root, comment: claimed[1] })
+    const scripts = SCRIPTS_DIR.exec(command)?.[1]
+    await setBinding($, agent, { root, comment: claimed[1], ...(scripts && { scripts }) })
     await debug($, agent, claimed[1], `bound to comment ${claimed[1]} in ${root}`)
   } else if (CLAIM.test(command)) {
     const said = output.trim().split('\n')[0] ?? ''

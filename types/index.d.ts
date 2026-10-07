@@ -1,7 +1,12 @@
 // The values Code Buddy's hooks module keeps in $.state for the session.
 
 /** The comment an agent claimed, and the project it belongs to. */
-export type Binding = { root: string; comment: string }
+export type Binding = {
+  root: string
+  comment: string
+  /** The folder of the claim.mjs the agent ran, when its command named it. */
+  scripts?: string
+}
 
 /** A file lock: the comment whose agent holds it, and since when. */
 export type Lock = { owner: string; at: number }

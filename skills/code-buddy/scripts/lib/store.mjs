@@ -282,7 +282,9 @@ export function createStore(project) {
         if (text && cancelled === false) {
           const last = current.messages?.at(-1)
           if (last?.author === 'reader') {
-            fields.messages = [...current.messages.slice(0, -1), { ...last, body: text }]
+            // New words, no longer the options the reader had chosen.
+            const edited = { author: last.author, body: text, at: last.at }
+            fields.messages = [...current.messages.slice(0, -1), edited]
           } else {
             fields.body = text
           }

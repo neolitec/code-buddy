@@ -211,25 +211,38 @@ async function handle(req, res) {
 
 const seen = new Map()
 
-function latestFollowUp(comment) {
+function latestReply(comment) {
   const last = comment.messages?.at(-1)
-  return last?.author === 'reader' ? last.body : undefined
+  return last?.author === 'reader' ? last : undefined
 }
+
+function latestFollowUp(comment) {
+  return latestReply(comment)?.body
+}
+
+/**
+ * A text as a JSON string: quoted, its quotes and line breaks escaped. The
+ * manager reads one event per line; a reader's line break used to split one.
+ * @param {string} text
+ */
+const quoted = (text) => JSON.stringify(text)
 
 function describe(comment) {
   const where = comment.element
-    ? `element=<${comment.element.tag}> "${comment.element.text.slice(0, 80)}"`
+    ? `element=<${comment.element.tag}> ${quoted(comment.element.text.slice(0, 80))}`
     : comment.quote
-      ? `quote="${comment.quote.slice(0, 120)}"`
+      ? `quote=${quoted(comment.quote.slice(0, 120))}`
       : comment.route === APP_ROUTE
         ? 'app-level'
         : 'page-level'
-  const section = comment.section ? ` section="${comment.section}"` : ''
+  const section = comment.section ? ` section=${quoted(comment.section)}` : ''
   const url = comment.url ? ` url=${comment.url}` : ''
-  const followUp = latestFollowUp(comment)
-  const text = followUp
-    ? `followup="${followUp}" messages=${comment.messages.length + 1}`
-    : `body="${comment.body}"`
+  const reply = latestReply(comment)
+  // The options the reader chose, apart: a label may hold the ", " that joins them in the text.
+  const choices = reply?.choices ? ` choices=${JSON.stringify(reply.choices)}` : ''
+  const text = reply
+    ? `followup=${quoted(reply.body)}${choices} messages=${comment.messages.length + 1}`
+    : `body=${quoted(comment.body)}`
   return `${comment.id} route=${comment.route}${url}${section} ${where} ${text}`
 }
 

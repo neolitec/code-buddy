@@ -39,6 +39,9 @@ released to the `stable` branch.
 
 ### Fixed
 
+- A reader's message with a line break split the server's event line, and
+  the manager read a truncated follow-up. The texts on an event line are now
+  JSON strings, their line breaks escaped.
 - After refusing a request body too large, the server kept the connection
   open with the rest of the body unread: the next request on it hung. It now
   closes it.

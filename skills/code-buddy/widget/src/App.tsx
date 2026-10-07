@@ -192,7 +192,8 @@ function Question({
   picked: string[]
   busy: boolean
   onToggle: (label: string) => void
-  onAnswer: (choices: string[]) => void
+  /** `withText`: the reader's typed text goes with the choices. */
+  onAnswer: (choices: string[], withText: boolean) => void
 }) {
   const multiple = !!message.multiple
   return (
@@ -219,7 +220,7 @@ function Question({
                 disabled={!live || busy}
                 onClick={() => {
                   if (multiple) onToggle(option.label)
-                  else onAnswer([option.label])
+                  else onAnswer([option.label], false)
                 }}
               >
                 {multiple && (
@@ -241,7 +242,7 @@ function Question({
             small
             icon="send"
             disabled={busy || !picked.length}
-            onClick={() => onAnswer(picked)}
+            onClick={() => onAnswer(picked, true)}
           >
             Send
           </Button>
@@ -550,15 +551,19 @@ export default function App({ root }: { root: Element }) {
       }
     })
 
-  /** The reader's answer: the options they chose, then whatever they typed. */
-  const sendReply = (comment: ReviewComment, choices: string[]) =>
+  /**
+   * The reader's answer: the options they chose, then what they typed, unless
+   * `withText` is false. One click on a single answer sends it alone: a draft
+   * the reader was still writing stays in the box.
+   */
+  const sendReply = (comment: ReviewComment, choices: string[], withText = true) =>
     void run(async () => {
-      const text = followUp?.id === comment.id ? followUp.body.trim() : ''
+      const text = withText && followUp?.id === comment.id ? followUp.body.trim() : ''
       await updateComment(comment.id, {
         ...(choices.length ? { choices } : {}),
         ...(text ? { followUp: text } : {}),
       })
-      setFollowUp(undefined)
+      if (text) setFollowUp(undefined)
       setPicked(undefined)
     })
 
@@ -724,7 +729,7 @@ export default function App({ root }: { root: Element }) {
                   picked={ticked(comment)}
                   busy={busy}
                   onToggle={(label) => toggle(comment, label)}
-                  onAnswer={(choices) => sendReply(comment, choices)}
+                  onAnswer={(choices, withText) => sendReply(comment, choices, withText)}
                 />
               ) : (
                 <div className="cb-bubble cb-bubble--claude">{message.body}</div>
