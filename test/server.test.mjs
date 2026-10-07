@@ -126,6 +126,7 @@ test("takes the reader's choice among the options Claude asked with", async () =
   const created = await json(
     await post(JSON.stringify({ route: '/cards', body: 'Rework the cards' })),
   )
+  const asking = output.length
   const asked = await run(process.execPath, [
     path.join(SCRIPTS, 'ask.mjs'),
     created.id,
@@ -138,6 +139,8 @@ test("takes the reader's choice among the options Claude asked with", async () =
     'List',
   ])
   assert.equal(asked.code, 0, asked.stderr)
+  // The server polls: answered before it sees the question, the reply would be an EDIT.
+  await nextLine(`ASKED ${created.id}`, asking)
   const printed = output.length
   const answered = await json(
     await fetch(`${base}/api/comments/${created.id}`, {
