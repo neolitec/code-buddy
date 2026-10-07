@@ -20,6 +20,7 @@ import {
   APP_ROUTE,
   type ReviewAnchor,
   type ReviewComment,
+  type ReviewMessage,
   type ReviewProgress,
   isActive,
   isAsking,
@@ -169,6 +170,87 @@ function MessageTime({ at }: { at: string }) {
   )
 }
 
+/**
+ * Claude's question, with the answers it offers. While it waits on the reader,
+ * an option answers it at once, or, when several may be picked, ticks it for
+ * the Send button; afterwards, the options the reader chose stay marked.
+ */
+function Question({
+  message,
+  live,
+  chosen,
+  picked,
+  busy,
+  onToggle,
+  onAnswer,
+}: {
+  message: ReviewMessage
+  /** The thread waits on the reader's answer to this question. */
+  live: boolean
+  /** What the reader answered, once they did. */
+  chosen: string[]
+  picked: string[]
+  busy: boolean
+  onToggle: (label: string) => void
+  onAnswer: (choices: string[]) => void
+}) {
+  const multiple = !!message.multiple
+  return (
+    <div className="cb-ask">
+      <span className="cb-ask-label">Question</span>
+      <span>{message.body}</span>
+      {!!message.options?.length && (
+        <div
+          className="cb-options"
+          role="group"
+          aria-label={multiple ? 'Pick one or more answers' : 'Pick an answer'}
+          data-testid="cb-options"
+        >
+          {message.options.map((option) => {
+            const on = live
+              ? picked.includes(option.label)
+              : chosen.includes(option.label)
+            return (
+              <button
+                key={option.label}
+                type="button"
+                className={`cb-option${on ? ' cb-option--on' : ''}`}
+                {...(multiple ? { role: 'checkbox', 'aria-checked': on } : {})}
+                disabled={!live || busy}
+                onClick={() => {
+                  if (multiple) onToggle(option.label)
+                  else onAnswer([option.label])
+                }}
+              >
+                {multiple && (
+                  <span className="cb-option-box">{on && <Icon name="check" />}</span>
+                )}
+                <span className="cb-option-text">
+                  <strong>{option.label}</strong>
+                  {option.description && <span>{option.description}</span>}
+                </span>
+                {!multiple && !live && on && <Icon name="check" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {live && multiple && (
+        <div className="cb-actions">
+          <Button
+            small
+            icon="send"
+            disabled={busy || !picked.length}
+            onClick={() => onAnswer(picked)}
+          >
+            Send
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface Draft extends ReviewAnchor {
   body: string
   app?: boolean
@@ -264,6 +346,8 @@ export default function App({ root }: { root: Element }) {
   const [flash, setFlash] = useState<Element>()
   const [resend, setResend] = useState<{ id: string; body: string }>()
   const [followUp, setFollowUp] = useState<{ id: string; body: string }>()
+  // The options ticked so far, under a question that takes several.
+  const [picked, setPicked] = useState<{ id: string; labels: string[] }>()
   const [created, setCreated] = useState<ReviewComment>()
   const [busy, setBusy] = useState(false)
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null)
@@ -449,6 +533,34 @@ export default function App({ root }: { root: Element }) {
       ? thread
       : undefined
   const reply = replying && followUp?.id === replying.id ? followUp.body : ''
+  const asked = replying && isAsking(replying) ? replying.messages?.at(-1) : undefined
+  const offered = !!asked?.options?.length
+  const ticked = (comment: ReviewComment) =>
+    picked?.id === comment.id ? picked.labels : []
+
+  // From the state at the time of the click: two quick clicks both count.
+  const toggle = (comment: ReviewComment, label: string) =>
+    setPicked((current) => {
+      const labels = current?.id === comment.id ? current.labels : []
+      return {
+        id: comment.id,
+        labels: labels.includes(label)
+          ? labels.filter((other) => other !== label)
+          : [...labels, label],
+      }
+    })
+
+  /** The reader's answer: the options they chose, then whatever they typed. */
+  const sendReply = (comment: ReviewComment, choices: string[]) =>
+    void run(async () => {
+      const text = followUp?.id === comment.id ? followUp.body.trim() : ''
+      await updateComment(comment.id, {
+        ...(choices.length ? { choices } : {}),
+        ...(text ? { followUp: text } : {}),
+      })
+      setFollowUp(undefined)
+      setPicked(undefined)
+    })
 
   // A conversation opens on its latest message; any other view, at its top.
   const screen = openedId ? `thread:${openedId}` : drafting ? 'draft' : view
@@ -598,17 +710,22 @@ export default function App({ root }: { root: Element }) {
         {deleteButton(comment)}
       </div>
       <div className="cb-chat">
-        {threadOf(comment).map((message, index) =>
+        {threadOf(comment).map((message, index, messages) =>
           message.author === 'claude' ? (
             // Its steps were only there to wait on it: an answer shows alone.
             // A thread only grows at its end: the index is a stable key.
             // oxlint-disable-next-line react/no-array-index-key
             <div key={index} className="cb-msg cb-msg--claude">
               {message.question ? (
-                <div className="cb-ask">
-                  <span className="cb-ask-label">Question</span>
-                  <span>{message.body}</span>
-                </div>
+                <Question
+                  message={message}
+                  live={index === messages.length - 1 && isAsking(comment)}
+                  chosen={messages[index + 1]?.choices ?? []}
+                  picked={ticked(comment)}
+                  busy={busy}
+                  onToggle={(label) => toggle(comment, label)}
+                  onAnswer={(choices) => sendReply(comment, choices)}
+                />
               ) : (
                 <div className="cb-bubble cb-bubble--claude">{message.body}</div>
               )}
@@ -943,18 +1060,16 @@ export default function App({ root }: { root: Element }) {
                 <Composer
                   value={reply}
                   placeholder={
-                    isAsking(replying)
-                      ? 'Answer Claude…'
-                      : 'Follow up, clarify, ask for a change…'
+                    offered
+                      ? 'Or answer in your own words…'
+                      : isAsking(replying)
+                        ? 'Answer Claude…'
+                        : 'Follow up, clarify, ask for a change…'
                   }
                   disabled={busy}
                   onChange={(value) => setFollowUp({ id: replying.id, body: value })}
-                  onSubmit={() =>
-                    void run(async () => {
-                      await updateComment(replying.id, { followUp: reply.trim() })
-                      setFollowUp(undefined)
-                    })
-                  }
+                  // Options already ticked go with the text.
+                  onSubmit={() => sendReply(replying, offered ? ticked(replying) : [])}
                 />
               )}
               {composing && !overflowing && (

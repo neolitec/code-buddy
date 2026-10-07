@@ -36,12 +36,23 @@ export interface ReviewProgress {
   error?: string
 }
 
+export interface ReviewOption {
+  label: string
+  description?: string
+}
+
 export interface ReviewMessage {
   author: 'reader' | 'claude'
   body: string
   at: string
   /** Claude only: a question for the reader rather than an answer. */
   question?: boolean
+  /** A question only: the answers it offers; the reader may write their own instead. */
+  options?: ReviewOption[]
+  /** With `options`: the reader may pick several. */
+  multiple?: boolean
+  /** Reader only: the options they picked, also written at the start of `body`. */
+  choices?: string[]
 }
 
 export interface ReviewCancellation {
@@ -88,6 +99,8 @@ export type ReviewCommentPatch = Partial<
   cancelled?: boolean
   /** Reopens a resolved comment, or answers Claude's question, with the reader's next message. */
   followUp?: string
+  /** Answers Claude's question with options it offered, before any `followUp` text. */
+  choices?: string[]
   /** With `cancelled: false`: replaces the reader's latest text before re-sending. */
   text?: string
 }

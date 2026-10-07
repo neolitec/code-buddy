@@ -11,6 +11,7 @@ import path from 'node:path'
 import { SKILL_DIR, WIDGET_VERSION, findProject, servedProject } from './lib/project.mjs'
 import {
   APP_ROUTE,
+  MAX_OPTIONS,
   createStore,
   isActive,
   isAsking,
@@ -123,6 +124,12 @@ function sanitisePatch(input) {
   if (typeof input.cancelled === 'boolean') patch.cancelled = input.cancelled
   if (typeof input.followUp === 'string' && input.followUp.trim()) {
     patch.followUp = input.followUp.trim()
+  }
+  // The options the reader chose; the store keeps only those Claude offered.
+  if (Array.isArray(input.choices)) {
+    patch.choices = input.choices
+      .filter((choice) => typeof choice === 'string')
+      .slice(0, MAX_OPTIONS)
   }
   if (typeof input.text === 'string' && input.text.trim()) {
     patch.text = input.text.trim()
@@ -267,7 +274,15 @@ const server = http.createServer((req, res) => {
   handle(req, res).catch((error) => {
     const cors = corsHeaders(req.headers.origin)
     if (error instanceof ClientError) {
-      send(res, error.status, { error: CLIENT_ERRORS[error.status] }, cors)
+      // The rest of a body too large is never read: a client reusing the
+      // connection would wait on it forever.
+      const close = error.status === 413 ? { connection: 'close' } : {}
+      send(
+        res,
+        error.status,
+        { error: CLIENT_ERRORS[error.status] },
+        { ...cors, ...close },
+      )
       return
     }
     // Internal details stay in the server's log, never in a response.

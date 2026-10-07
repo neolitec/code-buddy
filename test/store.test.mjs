@@ -71,6 +71,48 @@ test('a question leaves the comment open, waiting on the reader', async (t) => {
   await assert.rejects(comments.answer(comment.id, 'Guessed'), store.StoreRefusal)
 })
 
+const LAYOUTS = [
+  { label: 'Grid', description: 'Cards in a grid' },
+  { label: 'List' },
+  { label: 'Table' },
+]
+
+test("the reader's choice answers a question with options", async (t) => {
+  const { comments, comment } = await setUp(t)
+  await comments.answer(comment.id, 'Which layout?', { question: true, options: LAYOUTS })
+  const answered = await comments.update(comment.id, {
+    choices: ['List', 'Grid', 'Carousel'],
+    followUp: 'With bigger gaps',
+  })
+  assert.equal(store.isActive(answered), true)
+  const [asked, reply] = answered.messages
+  assert.deepEqual(asked.options, LAYOUTS)
+  assert.equal(asked.multiple, undefined)
+  // One option only, among those offered, then the reader's own words.
+  assert.deepEqual(reply.choices, ['Grid'])
+  assert.equal(reply.body, 'Grid\n\nWith bigger gaps')
+})
+
+test('a multiple-choice question takes several options, in their order', async (t) => {
+  const { comments, comment } = await setUp(t)
+  await comments.answer(comment.id, 'Which layouts?', {
+    question: true,
+    options: LAYOUTS,
+    multiple: true,
+  })
+  const answered = await comments.update(comment.id, { choices: ['Table', 'Grid'] })
+  assert.deepEqual(answered.messages.at(-1).choices, ['Grid', 'Table'])
+  assert.equal(answered.messages.at(-1).body, 'Grid, Table')
+})
+
+test('choices outside a question with options are ignored', async (t) => {
+  const { comments, comment } = await setUp(t)
+  await comments.answer(comment.id, 'Which blue?', { question: true })
+  const unchanged = await comments.update(comment.id, { choices: ['Grid'] })
+  assert.ok(store.isAsking(unchanged))
+  assert.equal(unchanged.messages.length, 1)
+})
+
 test('only a claimed comment shows progress, a tool merged from start to end', async (t) => {
   const { project, comments, comment } = await setUp(t)
   await appendProgress(project, comment.id, {

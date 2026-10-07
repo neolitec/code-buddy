@@ -290,6 +290,16 @@ async function record(
   }
 }
 
+/**
+ * AskUserQuestion would reach the manager's terminal, never the reader, who is
+ * on the page: the agent asks in the comment's thread instead.
+ */
+const askInThread = ({ root, comment }: Binding) =>
+  'The reader answers in the browser, where AskUserQuestion never shows. Ask in ' +
+  `the comment's thread instead: node <skill>/scripts/ask.mjs ${comment} --project ${root} ` +
+  '"<question>" --option "<label>: <description>" --option "…" (2 to 6 options; ' +
+  'add --multiple to let the reader pick several), then reply "QUESTION: <your question>".'
+
 function writeTarget(tool: string, args: Record<string, string | undefined>) {
   if (tool === 'Edit' || tool === 'Write' || tool === 'MultiEdit') return args.file_path
   if (tool === 'NotebookEdit') return args.notebook_path
@@ -580,6 +590,10 @@ export const register: Register = (on) => {
     }
     const binding = await bindingOf($, agent)
     const project = binding && (await projectOf($, agent, binding))
+    if (binding && project && e.tool === 'AskUserQuestion') {
+      await debug($, agent, binding.comment, 'refused AskUserQuestion: ask in the thread')
+      return { deny: askInThread(binding) }
+    }
     if (binding && project) {
       const step = {
         at: Date.now(),

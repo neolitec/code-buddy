@@ -27,6 +27,11 @@ released to the `stable` branch.
 
 - Claude can ask the reader a question in the thread (`ask.mjs`) instead of
   guessing; the comment waits on the reader's answer.
+- A question can offer choices (`ask.mjs --option "<label>: <description>"`,
+  `--multiple` to allow several): the thread shows one button per option, the
+  reader can still answer in their own words, and the thread keeps what they
+  chose. An agent working on a comment that calls `AskUserQuestion`, which
+  only reaches the manager's terminal, is told to ask in the thread instead.
 
 - The widget shows what the agent is doing now ("Reading `App.tsx`…",
   "Thinking…") and a fuller trail: tools as they start, end or fail, the
@@ -34,6 +39,9 @@ released to the `stable` branch.
 
 ### Fixed
 
+- After refusing a request body too large, the server kept the connection
+  open with the rest of the body unread: the next request on it hung. It now
+  closes it.
 - A long current step under a comment was cut off mid-word instead of ending
   with an ellipsis, and its working dots were hidden; it now ends with one
   ellipsis, and the dots show whenever the step fits.
