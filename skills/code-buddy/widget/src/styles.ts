@@ -180,6 +180,19 @@ code { font-family: var(--cb-mono); }
 .cb-bubble--claude { width: 100%; background: var(--cb-bubble); color: var(--cb-text); }
 .cb-ask { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid var(--cb-amber-border); border-radius: 14px; background: var(--cb-amber-bg); color: var(--cb-amber-ink); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cb-ask-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--cb-amber-fg); }
+/* The answers Claude offers: one button each, ticked once chosen. */
+.cb-options { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; white-space: normal; }
+.cb-option { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 12px; border: 1px solid var(--cb-amber-border); border-radius: var(--cb-radius); background: var(--cb-surface); color: var(--cb-amber-ink); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.cb-option:hover:not(:disabled) { border-color: var(--cb-accent); }
+.cb-option:disabled { cursor: default; }
+.cb-option--on { border-color: var(--cb-accent); background: var(--cb-accent-weak); color: var(--cb-text); }
+.cb-option:disabled:not(.cb-option--on) { opacity: .6; }
+.cb-option-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cb-option-text span { font-size: 13px; color: var(--cb-muted); }
+.cb-option > svg { flex-shrink: 0; width: 16px; height: 16px; margin-top: 2px; color: var(--cb-accent); }
+.cb-option-box { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin-top: 2px; border: 1.5px solid var(--cb-muted); border-radius: 4px; background: var(--cb-surface); }
+.cb-option--on .cb-option-box { border-color: var(--cb-accent); background: var(--cb-accent); color: #fff; }
+.cb-option-box svg { width: 12px; height: 12px; }
 .cb-message-time { font-size: 11px; color: var(--cb-muted); font-variant-numeric: tabular-nums; }
 .cb-working { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--cb-accent); }
 .cb-working span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

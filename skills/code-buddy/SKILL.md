@@ -118,7 +118,10 @@ answer to the same subagent.
 > 6. Reply with one line saying what changed. If the comment is unclear or
 >    needs a product decision, do not guess: ask it in the thread with
 >    `node SKILL/scripts/ask.mjs <id> --project PROJECT "<question>"` (stdin
->    works too) and reply `QUESTION: <your question>`.
+>    works too) and reply `QUESTION: <your question>`. To offer choices, add
+>    2 to 6 `--option "<label>: <description>"` (`--multiple` to allow
+>    several); the reader can still answer in their own words. Never use
+>    AskUserQuestion: the reader would not see it.
 
 ### Follow-up message (to an existing subagent)
 

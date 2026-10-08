@@ -5,6 +5,8 @@ import { errorCode } from './errors.mjs'
 import { withFileLock } from './filelock.mjs'
 
 export const APP_ROUTE = '*'
+/** The most options a question may offer the reader. */
+export const MAX_OPTIONS = 6
 const PROGRESS_SHOWN = 10
 const WRITE_KINDS = new Set(['edit', 'write', 'multiedit'])
 // What the agent says and thinks accompanies its steps; it is not one.
@@ -83,6 +85,25 @@ export async function readProgress(project, id, limit) {
 }
 
 const progressPath = (project, id) => path.join(project.progressDir, `${id}.jsonl`)
+
+/**
+ * The reader's answer to Claude's question: the options they chose, from the
+ * ones it offered, then their own words. Undefined when it says nothing.
+ * @param {any} comment
+ * @param {string | undefined} text
+ * @param {string[] | undefined} choices
+ * @returns {{ body: string, choices?: string[] } | undefined}
+ */
+function readerReply(comment, text, choices) {
+  const asked = isAsking(comment) ? comment.messages?.at(-1) : undefined
+  /** @type {string[]} */
+  const offered = asked?.options?.map((option) => option.label) ?? []
+  const valid = offered.filter((label) => choices?.includes(label))
+  const chosen = asked?.multiple ? valid : valid.slice(0, 1)
+  const body = [chosen.join(', '), text ?? ''].filter(Boolean).join('\n\n')
+  if (!body) return undefined
+  return chosen.length ? { body, choices: chosen } : { body }
+}
 
 export const normaliseQuote = (text) => text.replace(/\s+/g, ' ').trim()
 
@@ -172,11 +193,13 @@ export function createStore(project) {
      * to leave a thread open with no answer and no agent, showing "Waiting for
      * Claude" to a reader who was the one being waited on. The run's steps are
      * dropped: comments.json holds the discussion, not the agent's log.
+     * A question may offer `options`, the reader picking one, or several when
+     * `multiple`; they can always answer in their own words instead.
      * @param {string} id
      * @param {string} body
-     * @param {{ question?: boolean }} [options]
+     * @param {{ question?: boolean, options?: { label: string, description?: string }[], multiple?: boolean }} [options]
      */
-    answer(id, body, { question = false } = {}) {
+    answer(id, body, { question = false, options, multiple = false } = {}) {
       return exclusive(async () => {
         const comments = await readAll()
         const comment = comments.find((entry) => entry.id === id)
@@ -187,7 +210,14 @@ export function createStore(project) {
         const now = new Date().toISOString()
         comment.messages = [
           ...threadOf(comment).slice(1),
-          { author: 'claude', body, at: now, ...(question ? { question: true } : {}) },
+          {
+            author: 'claude',
+            body,
+            at: now,
+            ...(question ? { question: true } : {}),
+            ...(question && options?.length ? { options } : {}),
+            ...(question && options?.length && multiple ? { multiple: true } : {}),
+          },
         ]
         if (question) {
           comment.askedAt = now
@@ -239,19 +269,22 @@ export function createStore(project) {
         const index = comments.findIndex((c) => c.id === id)
         if (index === -1) return undefined
         const current = comments[index]
-        const { cancelled, followUp, text, ...fields } = patch
+        const { cancelled, followUp, choices, text, ...fields } = patch
         const now = new Date().toISOString()
-        if (followUp) {
+        const reply = readerReply(current, followUp, choices)
+        if (reply) {
           fields.status = 'open'
           fields.messages = [
             ...threadOf(current).slice(1),
-            { author: 'reader', body: followUp, at: now },
+            { author: 'reader', ...reply, at: now },
           ]
         }
         if (text && cancelled === false) {
           const last = current.messages?.at(-1)
           if (last?.author === 'reader') {
-            fields.messages = [...current.messages.slice(0, -1), { ...last, body: text }]
+            // New words, no longer the options the reader had chosen.
+            const edited = { author: last.author, body: text, at: last.at }
+            fields.messages = [...current.messages.slice(0, -1), edited]
           } else {
             fields.body = text
           }

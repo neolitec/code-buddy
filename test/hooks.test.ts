@@ -237,6 +237,37 @@ test('refuses an agent a Bash command that writes files, which no lock covers', 
   expect((await $.tool.call(bash('a1', answer))).deny).toBeUndefined()
 })
 
+const askUser = (agentId: string) => ({
+  tool: 'AskUserQuestion' as const,
+  questions: [
+    {
+      question: 'Which layout?',
+      header: 'Layout',
+      multiSelect: false,
+      options: [
+        { label: 'Grid', description: 'Cards in a grid' },
+        { label: 'List', description: 'One per row' },
+      ],
+    },
+  ],
+  tool_use_id: `t${++ids}`,
+  agentId,
+})
+
+test("sends an agent's AskUserQuestion to the comment's thread", async ($, on) => {
+  const w = world(on, [{ id: 'c1', status: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  const ran = await $.tool.call(askUser('a1'))
+  // The script the agent claimed with, and the project quoted: a path may hold a space.
+  expect(ran.deny).toContain(
+    `node "${SCRIPTS}/ask.mjs" c1 --project "${ROOT}" "<question>" --option "<label>: <description>"`,
+  )
+  // Not a step the reader sees.
+  expect(w.progress('c1').map((step) => step.kind)).toEqual(['start'])
+  // An agent working on no comment asks its own user.
+  expect((await $.tool.call(askUser('free'))).deny).toBeUndefined()
+})
+
 test('leaves Bash alone for an agent that claimed no comment', async ($, on) => {
   world(on, [])
   expect(
