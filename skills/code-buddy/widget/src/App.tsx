@@ -43,6 +43,7 @@ import {
   toast,
 } from './ui'
 import { activityOf, isOngoing, stepKey } from './activity'
+import { PANEL_IN_MS, PANEL_OUT_MS } from './styles'
 import buddy from './assets/buddy.webp'
 import buddyThinking from './assets/buddy-thinking.webp'
 
@@ -51,6 +52,8 @@ const REPOSITORY = 'https://github.com/neolitec/code-buddy'
 const PANEL_WIDTH = 380
 const MIN_PANEL_WIDTH = 320
 const MAX_PANEL_RATIO = 0.8
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 
 const clampWidth = (value: number) =>
   Math.round(
@@ -325,6 +328,8 @@ export default function App({ root }: { root: Element }) {
   const route = useRoute()
   const [saved] = useState(() => readSession<UiState>(UI_KEY))
   const [open, setOpen] = useState(saved?.open ?? false)
+  // Closed, but still on screen while it leaves.
+  const [leaving, setLeaving] = useState(false)
   const [docked, setDocked] = useState(saved?.docked ?? false)
   const [width, setWidth] = useState(saved?.width ?? PANEL_WIDTH)
   const [view, setView] = useState<View>(saved?.view ?? 'page')
@@ -359,6 +364,8 @@ export default function App({ root }: { root: Element }) {
   const hintHeight = useRef(0)
   const flashTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pendingAnchor = useRef<ReviewAnchor>(undefined)
+  const paddingAnimation = useRef<Animation>(undefined)
+  const layout = useRef({ open, docked })
 
   const page = useComments(route)
   const comments = page.comments
@@ -406,13 +413,41 @@ export default function App({ root }: { root: Element }) {
     }
   }, [root])
 
-  // Floating: the panel floats over the page, which is left untouched. Docked: the page is squeezed.
+  // Floating: the panel floats over the page, which is left untouched. Docked: the page is squeezed,
+  // in step with the panel as it opens, closes, widens or narrows; at once while it is dragged.
   useEffect(() => {
-    document.body.style.paddingRight = open && docked ? `${width}px` : ''
-    return () => {
-      document.body.style.paddingRight = ''
-    }
+    const body = document.body
+    const from = getComputedStyle(body).paddingRight
+    paddingAnimation.current?.cancel()
+    body.style.paddingRight = open && docked ? `${width}px` : ''
+    const moved = open !== layout.current.open || docked !== layout.current.docked
+    layout.current = { open, docked }
+    if (!moved || matchMedia(REDUCED_MOTION).matches) return
+    if (getComputedStyle(body).paddingRight === from) return
+    paddingAnimation.current = body.animate([{ paddingRight: from, offset: 0 }], {
+      duration: open ? PANEL_IN_MS : PANEL_OUT_MS,
+      easing: open ? 'ease-out' : 'ease-in',
+    })
   }, [open, docked, width])
+
+  useEffect(
+    () => () => {
+      paddingAnimation.current?.cancel()
+      document.body.style.paddingRight = ''
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (!leaving) return undefined
+    const timer = setTimeout(() => setLeaving(false), PANEL_OUT_MS)
+    return () => clearTimeout(timer)
+  }, [leaving])
+
+  const close = () => {
+    setOpen(false)
+    setLeaving(true)
+  }
 
   const toggleDocked = () => {
     setDocked(!docked)
@@ -949,10 +984,12 @@ export default function App({ root }: { root: Element }) {
         </div>
       )}
 
-      {open && (
+      {(open || leaving) && (
         <section
           className={`cb-panel cb-live ${docked ? 'cb-panel--docked' : ''}`}
           style={{ width }}
+          data-closing={!open || undefined}
+          inert={!open}
           data-testid="code-buddy-panel"
         >
           <div
@@ -1004,7 +1041,7 @@ export default function App({ root }: { root: Element }) {
                 label={docked ? 'Narrow panel' : 'Widen panel to half the page'}
                 onClick={toggleDocked}
               />
-              <IconButton icon="x" label="Close" onClick={() => setOpen(false)} />
+              <IconButton icon="x" label="Close" onClick={close} />
             </div>
           </header>
           <div className="cb-body" ref={setScroller}>
