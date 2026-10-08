@@ -19,8 +19,9 @@ merged. By taking part, you agree to follow the [code of conduct](CODE_OF_CONDUC
 
 ## Set up
 
-You need [Node.js](https://nodejs.org) 22 or later (the version CI uses is in
-[`.nvmrc`](.nvmrc)), npm, and [Claude Code](https://claude.com/claude-code).
+You need [Node.js](https://nodejs.org) 22.12 or later, except 25, which
+Vitest does not support and `npm ci` refuses (CI uses the version in
+[`.nvmrc`](.nvmrc)); npm; and [Claude Code](https://claude.com/claude-code).
 
 ```sh
 git clone https://github.com/<you>/code-buddy
@@ -107,7 +108,7 @@ It runs, in order:
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
 | `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
-| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording, playground |
+| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording, playground; then the widget's component tests in `widget/test/`: [Vitest](https://vitest.dev) with [happy-dom](https://github.com/capricorn86/happy-dom) and [Testing Library](https://testing-library.com/docs/react-testing-library/intro) |
 
 `npm run test:hooks` checks the hooks module with Claude Code itself
 (`claude plugin validate`, then `claude plugin test` on `test/hooks.test.ts`).
@@ -127,8 +128,9 @@ Rules that go with them:
 - **Behavior changes come with tests.** A bug fix starts with a test that
   fails without it. The `node:test` suites run the scripts as Claude Code
   does (a real server on a free port) in throwaway folders; they need no
-  network and no Claude Code. The hooks' tests run inside Claude Code, with
-  the disk and the tools beneath them in memory.
+  network and no Claude Code. The widget's component tests render it against
+  a stubbed `fetch` and drive it as a reader would. The hooks' tests run
+  inside Claude Code, with the disk and the tools beneath them in memory.
 - **Scripts are plain JavaScript with JSDoc types**, type-checked by TypeScript.
   Add types where the checker needs them rather than silencing it.
 - **Lint exceptions are rare and explained.** Disable a rule for one line only,

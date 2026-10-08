@@ -27,7 +27,9 @@ browser, and one background agent per comment makes the change. See the
 
 - `npm ci`: install (install scripts are disabled).
 - `npm run check`: format check, lint, type-check, build and tests; must pass.
-- `npm test`: the `node:test` suites in `test/` (they need the widget built).
+- `npm test`: the `node:test` suites in `test/` (they need the widget built),
+  then the widget's Vitest suites in `widget/test/` (`npx vitest` there to
+  watch).
 - `npm run test:hooks`: validate the plugin and run `test/hooks.test.ts` in
   Claude Code (2.1.287 or later; not in CI, run it when `hooks/` changes).
 - `npm run format`: apply Prettier.
