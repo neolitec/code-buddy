@@ -1,6 +1,11 @@
 import figtree from './assets/fonts/figtree-latin.woff2'
 import figtreeItalic from './assets/fonts/figtree-latin-italic.woff2'
 
+/** How long the panel takes to come in, or to widen and narrow. */
+export const PANEL_IN_MS = 200
+/** How long the panel takes to leave: shorter, it is on its way out. */
+export const PANEL_OUT_MS = 150
+
 /** Styles of the widget, scoped by its shadow root. */
 export const WIDGET_CSS = `
 :host {
@@ -102,8 +107,19 @@ code { font-family: var(--cb-mono); }
   position: fixed; top: 16px; right: 16px; bottom: 16px;
   display: flex; flex-direction: column; background: var(--cb-surface);
   border-radius: 12px; box-shadow: var(--cb-shadow);
+  animation: cb-panel-in ${PANEL_IN_MS}ms ease-out;
+  transition-property: width, top, right, bottom, border-radius;
+  transition-duration: ${PANEL_IN_MS}ms; transition-timing-function: ease-out;
 }
 .cb-panel--docked { top: 0; right: 0; bottom: 0; border-radius: 0; box-shadow: none; border-left: 1px solid var(--cb-border); }
+/* Kept on screen until it has left: the page underneath gets the pointer back at once. */
+.cb-panel[data-closing] { animation: cb-panel-out ${PANEL_OUT_MS}ms ease-in forwards; pointer-events: none; }
+/* Dragged, the edge follows the pointer. */
+.cb-panel:has(.cb-resize[data-dragging]) { transition: none; }
+@keyframes cb-panel-in { from { transform: translateX(100%); opacity: 0; } }
+@keyframes cb-panel-out { to { transform: translateX(100%); opacity: 0; } }
+@keyframes cb-fade-in { from { opacity: 0; } }
+@keyframes cb-fade-out { to { opacity: 0; } }
 .cb-resize { position: absolute; top: 0; bottom: 0; left: -3px; width: 7px; cursor: col-resize; z-index: 1; }
 .cb-resize:hover, .cb-resize[data-dragging] { background: var(--cb-accent); opacity: .6; }
 .cb-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--cb-border); }
@@ -221,6 +237,9 @@ code { font-family: var(--cb-mono); }
 @media (prefers-reduced-motion: reduce) {
   .cb-current-line--out { display: none; }
   .cb-current-line--in, .cb-dots i, .cb-step-icon { animation: none; }
+  /* The panel fades, and changes width at once. */
+  .cb-panel { animation-name: cb-fade-in; transition: none; }
+  .cb-panel[data-closing] { animation-name: cb-fade-out; }
 }
 .cb-stopped { padding: 8px; border-radius: var(--cb-radius); background: var(--cb-red-bg); color: var(--cb-red); font-size: 13px; }
 .cb-stopped code { overflow-wrap: anywhere; }
