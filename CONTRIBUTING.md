@@ -19,8 +19,9 @@ merged. By taking part, you agree to follow the [code of conduct](CODE_OF_CONDUC
 
 ## Set up
 
-You need [Node.js](https://nodejs.org) 22 or later (the version CI uses is in
-[`.nvmrc`](.nvmrc)), npm, and [Claude Code](https://claude.com/claude-code).
+You need [Node.js](https://nodejs.org) 22.12 or later, except 25, which
+Vitest does not support and `npm ci` refuses (CI uses the version in
+[`.nvmrc`](.nvmrc)); npm; and [Claude Code](https://claude.com/claude-code).
 
 ```sh
 git clone https://github.com/<you>/code-buddy
