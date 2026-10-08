@@ -15,3 +15,7 @@ skills/code-buddy/widget/dist/
 # Local state of a project using Code Buddy, and browser test output.
 .code-buddy/
 .playwright-mcp/
+
+# The playground's working copy, which /playground runs and agents edit, and its build.
+/.playground/
+/playground/dist/

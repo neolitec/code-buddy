@@ -19,6 +19,9 @@ browser, and one background agent per comment makes the change. See the
 - `skills/code-buddy/widget/src/`: the widget (React, TypeScript), bundled into
   `widget/dist/`, which is git-ignored: the Release workflow publishes it on
   the `stable` branch users install from.
+- `playground/`: a fake app with Code Buddy installed, to try changes on.
+  `/playground` (`.claude/skills/playground/`) runs it from `.playground/`, a
+  git-ignored copy the agents edit.
 
 ## Commands
 
@@ -30,6 +33,9 @@ browser, and one background agent per comment makes the change. See the
 - `npm run format`: apply Prettier.
 - `npm run build`: rebuild `widget/dist/` (the bundle and its third-party
   licenses).
+- `/playground`: try Code Buddy on the playground. A session started here
+  loads the plugin from the clone (`.claude/skills/code-buddy` links to the
+  root; `.claude/settings.json` disables the installed one): no `--plugin-dir`.
 
 ## Rules
 
