@@ -2,6 +2,8 @@ import { type ReviewAnchor, type ReviewElement, normaliseQuote } from './domain'
 
 const HEADINGS = 'h1, h2, h3'
 const WIDGET = '[data-code-buddy]'
+/** Text that is code or a control's value, never part of what the reader reads. */
+const UNREAD = 'script, style, template, noscript, select, textarea'
 
 interface TextIndex {
   nodes: { node: Text; start: number }[]
@@ -11,19 +13,101 @@ interface TextIndex {
   rawOffsets: number[]
 }
 
+/** Block-level by default, for a `display` the page's CSS leaves empty. */
+const BLOCK_TAGS = new Set([
+  'ADDRESS',
+  'ARTICLE',
+  'ASIDE',
+  'BLOCKQUOTE',
+  'CAPTION',
+  'DD',
+  'DETAILS',
+  'DIALOG',
+  'DIV',
+  'DL',
+  'DT',
+  'FIELDSET',
+  'FIGCAPTION',
+  'FIGURE',
+  'FOOTER',
+  'FORM',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'HEADER',
+  'HR',
+  'LI',
+  'MAIN',
+  'NAV',
+  'OL',
+  'P',
+  'PRE',
+  'SECTION',
+  'SUMMARY',
+  'TABLE',
+  'TBODY',
+  'TD',
+  'TFOOT',
+  'TH',
+  'THEAD',
+  'TR',
+  'UL',
+])
+
+function isBlock(element: Element): boolean {
+  const display = getComputedStyle(element).display
+  if (!display) return BLOCK_TAGS.has(element.tagName)
+  return !display.startsWith('inline') && display !== 'contents' && display !== 'none'
+}
+
+/** The block `node` sits in, inside `root`; `blocks` caches each element's answer. */
+function blockOf(root: Element, node: Text, blocks: Map<Element, boolean>): Element {
+  for (let element = node.parentElement; element && element !== root;) {
+    let block = blocks.get(element)
+    if (block === undefined) {
+      block = isBlock(element)
+      blocks.set(element, block)
+    }
+    if (block) return element
+    element = element.parentElement
+  }
+  return root
+}
+
+/**
+ * The page's text as written in the DOM, with a line break between blocks and
+ * at every `<br>`, so a quote across elements reads as two words, not one.
+ */
 function indexText(root: Element): TextIndex {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) =>
-      node.parentElement?.closest(WIDGET)
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_ACCEPT,
-  })
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) =>
+        node instanceof Element && node.matches(UNREAD)
+          ? NodeFilter.FILTER_REJECT
+          : (node instanceof Element ? node : node.parentElement)?.closest(WIDGET)
+            ? NodeFilter.FILTER_REJECT
+            : NodeFilter.FILTER_ACCEPT,
+    },
+  )
   const nodes: TextIndex['nodes'] = []
+  const blocks = new Map<Element, boolean>()
+  let block: Element | undefined
   let raw = ''
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    // The walker only shows text nodes (NodeFilter.SHOW_TEXT).
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    nodes.push({ node: node as Text, start: raw.length })
+    if (node instanceof Element) {
+      if (node.tagName === 'BR') raw += '\n'
+      continue
+    }
+    if (!(node instanceof Text)) continue
+    const current = blockOf(root, node, blocks)
+    if (block && current !== block) raw += '\n'
+    block = current
+    nodes.push({ node, start: raw.length })
     raw += node.textContent ?? ''
   }
 
@@ -73,6 +157,23 @@ function rangeOf(index: TextIndex, start: number, end: number): Range {
   return range
 }
 
+/** Where a boundary point falls in the normalised page text. */
+function textOffset(index: TextIndex, container: Node, offset: number): number {
+  const entry = index.nodes.find(({ node }) => node === container)
+  let raw: number | undefined
+  if (entry) {
+    raw = entry.start + offset
+  } else {
+    // A boundary between elements: the first text after it.
+    const point = document.createRange()
+    point.setStart(container, offset)
+    raw = index.nodes.find(({ node }) => point.comparePoint(node, 0) >= 0)?.start
+  }
+  if (raw === undefined) return index.text.length
+  const at = index.rawOffsets.findIndex((rawOffset) => rawOffset >= raw)
+  return at === -1 ? index.text.length : at
+}
+
 function occurrencesOf(text: string, quote: string): number[] {
   const found: number[] = []
   for (let at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) {
@@ -111,31 +212,75 @@ export function anchorFromSelection(
     return undefined
   }
 
-  const quote = normaliseQuote(selection.toString())
+  // The quote is read from the page's own text, not from `selection.toString()`:
+  // that one is the rendered text (uppercased by CSS, without hidden parts…),
+  // which the page's text may not contain, and the anchor could not be found.
+  const index = indexText(root)
+  let start = textOffset(index, range.startContainer, range.startOffset)
+  const end = textOffset(index, range.endContainer, range.endOffset)
+  while (index.text.charAt(start) === ' ') start++
+  const quote = normaliseQuote(index.text.slice(start, end))
   if (!quote) return undefined
 
-  const index = indexText(root)
-  const occurrences = occurrencesOf(index.text, quote)
-  if (occurrences.length === 0) return undefined
-
-  const prefix = document.createRange()
-  prefix.selectNodeContents(root)
-  prefix.setEnd(range.startContainer, range.startOffset)
-  const selectionStart = normaliseQuote(prefix.toString()).length
-  const distances = occurrences.map((at) => Math.abs(at - selectionStart))
-  const occurrence = distances.indexOf(Math.min(...distances))
+  const occurrence = Math.max(0, occurrencesOf(index.text, quote).indexOf(start))
 
   return { quote, occurrence, section: sectionOf(root, range) }
 }
 
-/** Finds the live Range for a stored anchor, if its quote is still on the page. */
-export function rangeFromAnchor(root: Element, anchor: ReviewAnchor): Range | undefined {
+/**
+ * Where `range` starts on screen: its first character's box. The whole range's
+ * box starts at its leftmost line, which is not the start once it wraps.
+ */
+export function startRect(range: Range): DOMRect {
+  const start = range.cloneRange()
+  start.collapse(true)
+  const caret = start.getBoundingClientRect()
+  return caret.height ? caret : range.getBoundingClientRect()
+}
+
+/** Where `quote` starts in the page text, ignoring spaces; ends after its last character. */
+function looseMatches(index: TextIndex, quote: string): [number, number][] {
+  const positions: number[] = []
+  let compact = ''
+  for (let i = 0; i < index.text.length; i++) {
+    if (index.text.charAt(i) === ' ') continue
+    compact += index.text.charAt(i)
+    positions.push(i)
+  }
+  const wanted = quote.replaceAll(' ', '')
+  if (!wanted) return []
+  return occurrencesOf(compact, wanted).map((at) => [
+    positions[at] ?? 0,
+    (positions[at + wanted.length - 1] ?? 0) + 1,
+  ])
+}
+
+function findAnchor(index: TextIndex, anchor: ReviewAnchor): Range | undefined {
   if (!anchor.quote) return undefined
-  const index = indexText(root)
   const occurrences = occurrencesOf(index.text, anchor.quote)
   const start = occurrences[anchor.occurrence] ?? occurrences[0]
-  if (start === undefined) return undefined
-  return rangeOf(index, start, start + anchor.quote.length)
+  if (start !== undefined) return rangeOf(index, start, start + anchor.quote.length)
+  // A line break between blocks depends on the layout (a span may be a block on a
+  // phone only), and comments saved before it was indexed have none: match
+  // without spaces rather than lose the comment.
+  const loose = looseMatches(index, anchor.quote)
+  const match = loose[anchor.occurrence] ?? loose[0]
+  return match && rangeOf(index, match[0], match[1])
+}
+
+/** Finds the live Range for a stored anchor, if its quote is still on the page. */
+export function rangeFromAnchor(root: Element, anchor: ReviewAnchor): Range | undefined {
+  return rangesFromAnchors(root, [anchor])[0]
+}
+
+/** `rangeFromAnchor` for several anchors, reading the page's text once. */
+export function rangesFromAnchors(
+  root: Element,
+  anchors: ReviewAnchor[],
+): (Range | undefined)[] {
+  if (!anchors.some((anchor) => anchor.quote)) return anchors.map(() => undefined)
+  const index = indexText(root)
+  return anchors.map((anchor) => findAnchor(index, anchor))
 }
 
 function step(element: Element): string {

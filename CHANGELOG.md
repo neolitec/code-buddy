@@ -33,12 +33,22 @@ released to the `stable` branch.
   chose. An agent working on a comment that calls `AskUserQuestion`, which
   only reaches the manager's terminal, is told to ask in the thread instead.
 
+- A bubble above the start of each open comment's text, where its *Comment*
+  button was: clicking it opens the comment's thread. While a comment on a
+  text is being written, the text stays highlighted on the page.
+
 - The widget shows what the agent is doing now ("Reading `App.tsx`…",
   "Thinking…") and a fuller trail: tools as they start, end or fail, the
   agent's messages, and its thinking (a summary when Claude Code provides one).
 
 ### Fixed
 
+- A text selection across several elements (two paragraphs, list items, table
+  cells) could not be commented on, and neither could text styled by CSS
+  (`text-transform`) or around hidden text, a `<select>` or a `<textarea>`:
+  no *Comment* button showed. The widget now quotes the page's own text. The
+  *Comment* button sits above the start of the selection, not at the left of
+  its whole box.
 - A reader's message with a line break split the server's event line, and
   the manager read a truncated follow-up. The texts on an event line are now
   JSON strings, their line breaks escaped.
