@@ -2,3 +2,5 @@
 *.md
 package-lock.json
 skills/code-buddy/widget/dist/
+/.playground/
+/playground/dist/

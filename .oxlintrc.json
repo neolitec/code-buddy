@@ -9,7 +9,11 @@
   "env": {
     "es2024": true
   },
-  "ignorePatterns": ["skills/code-buddy/widget/dist/**"],
+  "ignorePatterns": [
+    "skills/code-buddy/widget/dist/**",
+    ".playground/**",
+    "playground/dist/**"
+  ],
   "overrides": [
     {
       "files": ["skills/code-buddy/scripts/**", "**/*.mjs"],
@@ -27,7 +31,7 @@
       }
     },
     {
-      "files": ["skills/code-buddy/widget/src/**"],
+      "files": ["skills/code-buddy/widget/src/**", "playground/src/**"],
       "env": {
         "browser": true
       }

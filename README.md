@@ -173,19 +173,22 @@ To report a vulnerability, see the [security policy](SECURITY.md).
 
 ## Development
 
-Load the plugin from your clone instead of the installed copy. Build the
-widget once, then start Claude Code in a frontend project with `--plugin-dir`
-and run the skill as usual.
+The repository holds a playground, a small fake app to try Code Buddy on.
+Claude Code started in your clone loads the plugin from it, instead of the
+installed copy; launch the playground there:
 
 ```sh
-cd ~/dev/code-buddy && npm ci && npm run build
-cd ~/dev/my-frontend-app
-claude --plugin-dir ~/dev/code-buddy
+npm ci
+claude
 ```
 
-If the plugin is also installed from the marketplace, disable it first
-(`claude plugin disable code-buddy@code-buddy`) so the skill is not loaded
-twice.
+```
+/playground        a fresh copy of the playground, with Code Buddy, in your browser
+/playground keep   the same, keeping the changes agents made last time
+```
+
+See [Trying your changes](CONTRIBUTING.md#trying-your-changes) in
+CONTRIBUTING.md, which also covers trying them in an app of your own.
 
 What to do after a change:
 

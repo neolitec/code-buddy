@@ -31,8 +31,49 @@ npm ci
 `npm ci` never runs install scripts: [`.npmrc`](.npmrc) sets
 `ignore-scripts=true`. Keep it that way.
 
-To try your changes in a real app, load the plugin from your clone; see
-[Development](README.md#development) in the README.
+## Trying your changes
+
+`playground/` is a small fake app (a coffee roaster's shop: routes, a table, a
+form, a dialog, text split across elements) with Code Buddy installed in it as
+`init` would install it. Start Claude Code in your clone and launch it:
+
+```sh
+claude
+```
+
+```
+/playground
+```
+
+In this repository, Claude Code loads Code Buddy from your clone, with no
+flag: `.claude/skills/code-buddy` is a link to the repository root, which
+Claude Code loads as a plugin (`code-buddy@skills-dir` in `claude plugin
+list`), and `.claude/settings.json` disables the copy installed from the
+marketplace, in this project only. It loads once you trust the folder, on the
+first start. Do not add `--plugin-dir .`: the plugin would load twice. On
+Windows, git creates the link only with `core.symlinks` enabled (Developer
+Mode, then `git config core.symlinks true` before cloning).
+
+Edits are read from your clone: after a change to `skills/code-buddy/SKILL.md`
+or `hooks/`, run `/reload-plugins` before the next `/playground`.
+
+It builds the widget when `widget/dist/` is missing or older than
+`widget/src/`, copies `playground/` to `.playground/` (git-ignored), starts the
+app there on <http://localhost:5190>, runs `/code-buddy:code-buddy .playground`
+and opens the app in your browser. Comment on it: the agents edit
+`.playground/`, so `git status` stays clean. `/playground` starts again from
+a fresh copy, comments included; `/playground keep` keeps the copy and the
+changes made to it. To change the playground itself (a page for a new
+feature), edit `playground/` and commit it like the rest. `npm run playground`
+serves the committed app alone, without Code Buddy.
+
+To try a change in an app of your own instead, start Claude Code in it with
+`claude --plugin-dir ~/dev/code-buddy`, after `claude plugin disable
+code-buddy@code-buddy` if the plugin is also installed, and run the skill as
+usual.
+
+What to do after a change, in a running session, is in the README's
+[Development](README.md#development) section.
 
 ## Layout
 
@@ -45,6 +86,9 @@ To try your changes in a real app, load the plugin from your clone; see
 | `skills/code-buddy/scripts/`          | Node.js scripts (ES modules, JSDoc types), run by the skill         |
 | `skills/code-buddy/widget/src/`       | The browser widget (React, TypeScript)                              |
 | `skills/code-buddy/widget/dist/`      | The built widget: `npm run build`; never committed on `main`        |
+| `playground/`                         | A fake app to try Code Buddy on, launched by `/playground`          |
+| `.claude/skills/playground/`          | The `/playground` skill of this repository                          |
+| `.claude/skills/code-buddy`           | A link to the root: Claude Code loads the plugin from the clone     |
 
 ## Checks
 
@@ -63,7 +107,7 @@ It runs, in order:
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
 | `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
-| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording |
+| `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording, playground |
 
 `npm run test:hooks` checks the hooks module with Claude Code itself
 (`claude plugin validate`, then `claude plugin test` on `test/hooks.test.ts`).
