@@ -95,7 +95,8 @@ from the current directory, else from the repository root.
 ## In the widget
 
 - **Comment** opens a new comment for the page, or the whole app.
-- **Select text**, then *Comment*, to anchor a comment to that text.
+- **Select text**, then *Comment*, to anchor a comment to that text. A bubble
+  then marks the text on the page; clicking it opens the comment's thread.
 - **Point at element** to anchor it to an element; hovering the element chip
   later outlines it on the page, clicking it scrolls to it (navigating first
   if it lives on another page).

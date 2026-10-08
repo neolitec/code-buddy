@@ -252,6 +252,10 @@ code { font-family: var(--cb-mono); }
 .cb-mark { position: fixed; pointer-events: none; border: 2px solid var(--cb-yellow); border-radius: 4px; background: rgba(255, 196, 0, .1); }
 .cb-mark--active { border-color: var(--cb-red); background: rgba(255, 140, 0, .12); }
 .cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-yellow-dark); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -32px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-yellow-dark); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s, background .15s; }
+.cb-quote-pin svg { width: 12px; height: 12px; }
+.cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
+.cb-quote-pin--active { background: var(--cb-accent); }
 .cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
 .cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
@@ -273,4 +277,5 @@ export const PAGE_CSS = `
 @font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
 ::highlight(code-buddy) { background-color: rgba(255, 213, 79, 0.45); }
 ::highlight(code-buddy-active) { background-color: rgba(255, 152, 0, 0.55); }
+::highlight(code-buddy-draft) { background-color: rgba(33, 110, 192, 0.25); }
 `

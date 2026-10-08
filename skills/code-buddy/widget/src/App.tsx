@@ -7,7 +7,13 @@ import {
   useRef,
   useState,
 } from 'react'
-import { anchorFromElement, anchorFromSelection, elementFromAnchor } from './anchors'
+import {
+  anchorFromElement,
+  anchorFromSelection,
+  elementFromAnchor,
+  rangeFromAnchor,
+  startRect,
+} from './anchors'
 import {
   createComment,
   deleteComment,
@@ -27,7 +33,7 @@ import {
   threadOf,
 } from './domain'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
-import { ElementMarks, ElementPicker, TargetOutline } from './overlays'
+import { ElementMarks, ElementPicker, QuoteBubbles, TargetOutline } from './overlays'
 import {
   Button,
   Checkbox,
@@ -380,8 +386,14 @@ export default function App({ root }: { root: Element }) {
     writeSession(UI_KEY, { open, docked, width, view, threadId, statusFilter })
   }, [open, docked, width, view, threadId, statusFilter])
 
+  // The quote of the comment being written stays marked once the selection is gone.
+  const draftQuote = view === 'page' ? draft?.quote : undefined
+  const draftOccurrence = draft?.occurrence ?? 0
   useEffect(() => {
-    const paint = () => paintHighlights(root, comments, activeId)
+    const drafted = draftQuote
+      ? { section: '', quote: draftQuote, occurrence: draftOccurrence }
+      : undefined
+    const paint = () => paintHighlights(root, comments, activeId, drafted)
     paint()
     const observer = new MutationObserver(paint)
     observer.observe(root, { childList: true, subtree: true, characterData: true })
@@ -389,7 +401,7 @@ export default function App({ root }: { root: Element }) {
       observer.disconnect()
       clearHighlights()
     }
-  }, [root, comments, activeId])
+  }, [root, comments, activeId, draftQuote, draftOccurrence])
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -401,7 +413,8 @@ export default function App({ root }: { root: Element }) {
         return
       }
       pendingAnchor.current = anchor
-      const rect = selection.getRangeAt(0).getBoundingClientRect()
+      // The quote's first character: a drag may start past the end of the line above.
+      const rect = startRect(rangeFromAnchor(root, anchor) ?? selection.getRangeAt(0))
       setSelectionButton({ top: rect.top - 40, left: rect.left })
     }
     const onScroll = () => setSelectionButton(undefined)
@@ -553,6 +566,16 @@ export default function App({ root }: { root: Element }) {
     setActiveId(comment.id)
     setThreadId(comment.id)
     scrollToComment(root, comment)
+  }
+
+  /** A bubble on the page: its thread, in the panel, opened if it was closed. */
+  const openFromPage = (comment: ReviewComment) => {
+    // Like Escape, never at the cost of what the reader is writing.
+    if (draft?.body.trim()) return
+    setDraft(undefined)
+    setView('page')
+    setOpen(true)
+    jump(comment)
   }
 
   const thread = threadId
@@ -952,6 +975,12 @@ export default function App({ root }: { root: Element }) {
   return (
     <div className="cb">
       <ElementMarks root={root} comments={comments} activeId={activeId} />
+      <QuoteBubbles
+        root={root}
+        comments={comments}
+        activeId={activeId}
+        onOpen={openFromPage}
+      />
       {outlined && <TargetOutline element={outlined} />}
       {picking && (
         <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />
