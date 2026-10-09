@@ -1,7 +1,20 @@
-import { useEffect, useState } from 'react'
+import {
+  type MouseEvent as ReactMouseEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
-import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
-import type { ReviewComment } from './domain'
+import {
+  elementFromAnchor,
+  elementsIn,
+  holderOf,
+  rangesFromAnchors,
+  rectFromArea,
+  startRect,
+} from './anchors'
+import type { ReviewArea, ReviewComment } from './domain'
 import { RAINBOW_PERIOD } from './styles'
 import { Icon } from './ui'
 
@@ -116,6 +129,61 @@ export function ElementMarks({
             onClick={() => onOpen(comment)}
           >
             <Icon name="chat" />
+          </button>
+        </div>
+      ))}
+    </>
+  )
+}
+
+function findAreas(root: Element, comments: ReviewComment[]) {
+  return comments.flatMap((comment) => {
+    const { area } = comment
+    return comment.status === 'open' && area
+      ? [{ comment, area, holder: holderOf(root, area) }]
+      : []
+  })
+}
+
+function measureAreas(found: ReturnType<typeof findAreas>): Mark[] {
+  return found.map(({ comment, area, holder }) => ({
+    comment,
+    ...rectFromArea(area, holder),
+  }))
+}
+
+/**
+ * Frames around the areas open comments were drawn on, as around an element,
+ * until Claude resolves their thread; a bubble on each opens its thread.
+ */
+export function AreaMarks({
+  root,
+  comments,
+  onOpen,
+}: {
+  root: Element
+  comments: ReviewComment[]
+  onOpen: (comment: ReviewComment) => void
+}) {
+  const marks = useTracked(root, comments, findAreas, measureAreas)
+
+  return (
+    <>
+      {marks.map(({ comment, top, left, width, height }) => (
+        <div
+          key={comment.id}
+          className="cb-mark cb-mark--area"
+          data-testid="cb-area-mark"
+          style={{ top, left, width, height }}
+        >
+          <button
+            type="button"
+            className="cb-quote-pin cb-mark-pin cb-live"
+            aria-label="Open the comment on the drawn area"
+            title={comment.body}
+            onClick={() => onOpen(comment)}
+          >
+            <Icon name="frame" />
           </button>
         </div>
       ))}
@@ -282,14 +350,14 @@ export function QuoteBubbles({
   )
 }
 
-/** Outlines `element` while it is on screen, following scroll and layout. */
-export function TargetOutline({ element }: { element: Element }) {
+/** The box `measure` gives, once per frame, while it is on screen. */
+function useOnScreen(measure: () => Box | undefined): Box | undefined {
   const [box, setBox] = useState<Box>()
 
   useEffect(() => {
     let frame = 0
     const track = () => {
-      const next = element.isConnected ? boxOf(element) : undefined
+      const next = measure()
       const onScreen =
         next &&
         next.width > 0 &&
@@ -305,13 +373,17 @@ export function TargetOutline({ element }: { element: Element }) {
     }
     track()
     return () => cancelAnimationFrame(frame)
-  }, [element])
+  }, [measure])
 
+  return box
+}
+
+function Outline({ box, area }: { box: Box | undefined; area?: boolean }) {
   if (!box) return null
   return (
     <div
-      className="cb-outline"
-      data-testid="cb-target"
+      className={`cb-outline${area ? ' cb-outline--area' : ''}`}
+      data-testid={area ? 'cb-area' : 'cb-target'}
       style={{
         top: box.top - 4,
         left: box.left - 4,
@@ -320,6 +392,24 @@ export function TargetOutline({ element }: { element: Element }) {
       }}
     />
   )
+}
+
+/** Outlines `element` while it is on screen, following scroll and layout. */
+export function TargetOutline({ element }: { element: Element }) {
+  const measure = useCallback(
+    () => (element.isConnected ? boxOf(element) : undefined),
+    [element],
+  )
+  return <Outline box={useOnScreen(measure)} />
+}
+
+/** Outlines a drawn area while it is on screen, in the element it was drawn in. */
+export function AreaOutline({ root, area }: { root: Element; area: ReviewArea }) {
+  const measure = useCallback(
+    () => rectFromArea(area, holderOf(root, area)),
+    [root, area],
+  )
+  return <Outline box={useOnScreen(measure)} area />
 }
 
 /** Dashed outline follows the pointer; a click picks the element, Escape cancels. */
@@ -389,5 +479,156 @@ export function ElementPicker({
         </div>
       )}
     </>
+  )
+}
+
+/** Under this many pixels a side, a drag is a slip, not an area. */
+const MIN_SIDE = 8
+
+interface Point {
+  x: number
+  y: number
+}
+
+interface Drag {
+  start: Point
+  end: Point
+  /** Where the pointer is in the viewport, to follow a scroll. */
+  pointer: Point
+}
+
+/** The box between two corners on the page, in viewport pixels. */
+function boxBetween(start: Point, end: Point): Box {
+  const left = Math.min(start.x, end.x) - window.scrollX
+  const top = Math.min(start.y, end.y) - window.scrollY
+  return {
+    left,
+    top,
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  }
+}
+
+/**
+ * The reader drags a rectangle over the page; the rest of the page dims, and
+ * the elements it covers are outlined as it grows. Scrolling while dragging
+ * extends it past the window. Escape cancels.
+ */
+export function AreaDrawer({
+  root,
+  onDraw,
+  onCancel,
+}: {
+  root: Element
+  onDraw: (rect: Box) => void
+  onCancel: () => void
+}) {
+  // Both corners on the page, not in the viewport: the page may scroll under the drag.
+  const [drag, setDrag] = useState<Drag>()
+  const latest = useRef<Drag>(undefined)
+  const [covered, setCovered] = useState<Box[]>([])
+  const box = drag && boxBetween(drag.start, drag.end)
+
+  const update = (next: Drag | undefined) => {
+    latest.current = next
+    setDrag(next)
+  }
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
+  const dragging = !!drag
+  useEffect(() => {
+    if (!dragging) return undefined
+    const follow = (pointer: Point) => {
+      const current = latest.current
+      if (!current) return undefined
+      const next = {
+        start: current.start,
+        end: { x: pointer.x + window.scrollX, y: pointer.y + window.scrollY },
+        pointer,
+      }
+      latest.current = next
+      setDrag(next)
+      return next
+    }
+    const onMove = (event: MouseEvent) => follow({ x: event.clientX, y: event.clientY })
+    const onScroll = () => latest.current && follow(latest.current.pointer)
+    const onUp = (event: MouseEvent) => {
+      const done = follow({ x: event.clientX, y: event.clientY })
+      latest.current = undefined
+      setDrag(undefined)
+      const rect = done && boxBetween(done.start, done.end)
+      if (rect && rect.width >= MIN_SIDE && rect.height >= MIN_SIDE) onDraw(rect)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('scroll', onScroll, true)
+    }
+  }, [dragging, onDraw])
+
+  // What the area will record, outlined as it grows: once per frame at most.
+  const left = box?.left
+  const top = box?.top
+  const width = box?.width
+  const height = box?.height
+  const sized = left !== undefined && top !== undefined && !!width && !!height
+  useEffect(() => {
+    if (left === undefined || top === undefined || !width || !height) return undefined
+    const frame = requestAnimationFrame(() => {
+      const { covers } = elementsIn(root, { left, top, width, height })
+      setCovered(covers.map(boxOf))
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [root, left, top, width, height])
+
+  const start = (event: ReactMouseEvent) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const pointer = { x: event.clientX, y: event.clientY }
+    const point = { x: pointer.x + window.scrollX, y: pointer.y + window.scrollY }
+    setCovered([])
+    update({ start: point, end: point, pointer })
+  }
+
+  return (
+    <div className="cb-draw cb-live" data-testid="cb-draw" onMouseDown={start}>
+      {!box && (
+        <div className="cb-hint">
+          Drag over the page to frame an area. Scroll to stretch it; Escape cancels.
+        </div>
+      )}
+      {(sized ? covered : []).map((part) => (
+        <div
+          key={`${part.top}:${part.left}:${part.width}:${part.height}`}
+          className="cb-draw-covered"
+          style={{
+            top: part.top,
+            left: part.left,
+            width: part.width,
+            height: part.height,
+          }}
+        />
+      ))}
+      {box && (
+        <div
+          className="cb-draw-box"
+          style={{ top: box.top, left: box.left, width: box.width, height: box.height }}
+        >
+          <span>
+            {Math.round(box.width)} × {Math.round(box.height)}
+          </span>
+        </div>
+      )}
+    </div>
   )
 }

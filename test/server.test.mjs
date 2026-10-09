@@ -122,6 +122,70 @@ test('creates a comment and lists it for its page', async () => {
   assert.ok(listed.some((c) => c.body === 'Typo here' && c.status === 'open'))
 })
 
+test('keeps a drawn area, and tells the manager what it holds', async () => {
+  const printed = output.length
+  const created = await json(
+    await post(
+      JSON.stringify({
+        route: '/cards',
+        body: 'Tighten this gap',
+        area: {
+          top: 300.4,
+          left: -5,
+          width: 500,
+          height: 60,
+          viewport: { width: 1280, height: 800, scrollX: 0, scrollY: 'far' },
+          within: {
+            selector: 'section',
+            tag: 'section',
+            text: 'Card A Card B',
+            box: { top: 0.5, left: 0.01, width: 7, height: 0.15 },
+          },
+          covers: [],
+          crosses: [
+            { selector: 'section > div:nth-of-type(1)', tag: 'div', text: 'Card A' },
+            { tag: 'div', text: 'no selector' },
+            { selector: 'section > div:nth-of-type(2)', tag: 'div', text: 'Card B' },
+          ],
+        },
+      }),
+    ),
+  )
+  // Rounded, clamped, and only the elements it can find again.
+  assert.deepEqual(created.area, {
+    top: 300,
+    left: 0,
+    width: 500,
+    height: 60,
+    viewport: { width: 1280, height: 800, scrollX: 0, scrollY: 0 },
+    within: {
+      selector: 'section',
+      tag: 'section',
+      text: 'Card A Card B',
+      box: { top: 0.5, left: 0.01, width: 1, height: 0.15 },
+    },
+    covers: [],
+    crosses: [
+      { selector: 'section > div:nth-of-type(1)', tag: 'div', text: 'Card A' },
+      { selector: 'section > div:nth-of-type(2)', tag: 'div', text: 'Card B' },
+    ],
+  })
+  const event = await nextLine(`NEW ${created.id} `, printed)
+  assert.match(
+    event,
+    / area=500x60@0,300 within="<section> Card A Card B" covers=\[\] crosses=\["<div> Card A","<div> Card B"\] body="Tighten this gap"$/,
+  )
+})
+
+test('ignores an area with no surface', async () => {
+  const created = await json(
+    await post(
+      JSON.stringify({ route: '/cards', body: 'Here', area: { width: 0, height: 40 } }),
+    ),
+  )
+  assert.equal(created.area, undefined)
+})
+
 test("takes the reader's choice among the options Claude asked with", async () => {
   const created = await json(
     await post(JSON.stringify({ route: '/cards', body: 'Rework the cards' })),

@@ -113,6 +113,66 @@ function sanitiseElement(element) {
   }
 }
 
+/** An element a drawn area covers or crosses: no HTML, the area may hold many. */
+function sanitiseNode(node) {
+  if (!node || typeof node.selector !== 'string') return undefined
+  return {
+    selector: node.selector.slice(0, 500),
+    tag: String(node.tag ?? '').slice(0, 20),
+    text: normaliseQuote(String(node.text ?? '')).slice(0, 80),
+  }
+}
+
+/** @param {unknown} value */
+const pixels = (value) => Math.min(Math.max(Math.round(Number(value) || 0), 0), 1_000_000)
+
+/** @param {unknown} value */
+const fraction = (value) => Math.min(Math.max(Number(value) || 0, 0), 1)
+
+/**
+ * @param {unknown} list
+ * @param {number} max
+ */
+const sanitiseNodes = (list, max) =>
+  (Array.isArray(list) ? list : []).slice(0, max).map(sanitiseNode).filter(Boolean)
+
+/** A rectangle the reader drew over the page; one with no surface is none. */
+function sanitiseArea(area) {
+  if (!area || typeof area !== 'object') return undefined
+  const width = pixels(area.width)
+  const height = pixels(area.height)
+  if (!width || !height) return undefined
+  const within = sanitiseNode(area.within)
+  const box = area.within?.box
+  return {
+    top: pixels(area.top),
+    left: pixels(area.left),
+    width,
+    height,
+    viewport: {
+      width: pixels(area.viewport?.width),
+      height: pixels(area.viewport?.height),
+      scrollX: pixels(area.viewport?.scrollX),
+      scrollY: pixels(area.viewport?.scrollY),
+    },
+    ...(within && box && typeof box === 'object'
+      ? {
+          within: {
+            ...within,
+            box: {
+              top: fraction(box.top),
+              left: fraction(box.left),
+              width: fraction(box.width),
+              height: fraction(box.height),
+            },
+          },
+        }
+      : {}),
+    covers: sanitiseNodes(area.covers, 10),
+    crosses: sanitiseNodes(area.crosses, 6),
+  }
+}
+
 function sanitisePatch(input) {
   const patch = {}
   if (input.status === 'open' || input.status === 'resolved') {
@@ -186,6 +246,7 @@ async function handle(req, res) {
         quote: normaliseQuote(String(input.quote ?? '')).slice(0, 2000),
         occurrence: Math.max(0, Math.floor(Number(input.occurrence) || 0)),
         element: sanitiseElement(input.element),
+        area: sanitiseArea(input.area),
       })
       return send(res, 201, comment, cors)
     }
@@ -227,14 +288,29 @@ function latestFollowUp(comment) {
  */
 const quoted = (text) => JSON.stringify(text)
 
+/** @param {{ tag: string, text: string }} node */
+const nodeLabel = (node) => `<${node.tag}> ${node.text.slice(0, 40)}`.trim()
+
+/**
+ * Where the area is and what it holds, for the manager to pass on: its size and
+ * corner on the page, the element it lies in, and those it covers or crosses.
+ */
+function describeArea(area) {
+  const within = area.within ? ` within=${quoted(nodeLabel(area.within))}` : ''
+  const nodes = (list) => JSON.stringify(list.map(nodeLabel))
+  return `area=${area.width}x${area.height}@${area.left},${area.top}${within} covers=${nodes(area.covers)} crosses=${nodes(area.crosses)}`
+}
+
 function describe(comment) {
   const where = comment.element
     ? `element=<${comment.element.tag}> ${quoted(comment.element.text.slice(0, 80))}`
-    : comment.quote
-      ? `quote=${quoted(comment.quote.slice(0, 120))}`
-      : comment.route === APP_ROUTE
-        ? 'app-level'
-        : 'page-level'
+    : comment.area
+      ? describeArea(comment.area)
+      : comment.quote
+        ? `quote=${quoted(comment.quote.slice(0, 120))}`
+        : comment.route === APP_ROUTE
+          ? 'app-level'
+          : 'page-level'
   const section = comment.section ? ` section=${quoted(comment.section)}` : ''
   const url = comment.url ? ` url=${comment.url}` : ''
   const reply = latestReply(comment)

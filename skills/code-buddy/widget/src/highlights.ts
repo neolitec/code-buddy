@@ -1,5 +1,5 @@
 import type { ReviewAnchor, ReviewComment } from './domain'
-import { elementFromAnchor, rangeFromAnchor } from './anchors'
+import { elementFromAnchor, rangeFromAnchor, scrollToArea } from './anchors'
 
 /**
  * The text the comment being written is about, until it is saved. Saved, it
@@ -23,6 +23,7 @@ export function clearHighlights(): void {
 }
 
 export function scrollToComment(root: Element, comment: ReviewComment): void {
+  if (comment.area) return scrollToArea(root, comment.area)
   const range = rangeFromAnchor(root, comment)
   const target =
     elementFromAnchor(root, comment) ??

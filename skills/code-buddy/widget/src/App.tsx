@@ -8,10 +8,13 @@ import {
   useState,
 } from 'react'
 import {
+  anchorFromArea,
   anchorFromElement,
   anchorFromSelection,
   elementFromAnchor,
+  holderOf,
   rangeFromAnchor,
+  scrollToArea,
   startRect,
 } from './anchors'
 import {
@@ -25,6 +28,8 @@ import {
 import {
   APP_ROUTE,
   type ReviewAnchor,
+  type ReviewArea,
+  type ReviewBox,
   type ReviewComment,
   type ReviewMessage,
   type ReviewProgress,
@@ -33,7 +38,15 @@ import {
   threadOf,
 } from './domain'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
-import { ElementMarks, ElementPicker, QuoteBubbles, TargetOutline } from './overlays'
+import {
+  AreaDrawer,
+  AreaMarks,
+  AreaOutline,
+  ElementMarks,
+  ElementPicker,
+  QuoteBubbles,
+  TargetOutline,
+} from './overlays'
 import {
   Button,
   Checkbox,
@@ -321,6 +334,20 @@ function latestText(comment: ReviewComment): string {
   return last?.author === 'reader' ? last.body : comment.body
 }
 
+/** What a drawn area covers, in a few words: the elements inside it, else those it cuts through. */
+function areaContents(area: ReviewArea): string {
+  const nodes = area.covers.length ? area.covers : area.crosses
+  const shown = nodes.slice(0, 3).map((node) => `<${node.tag}>`)
+  const more = nodes.length > shown.length ? ` +${nodes.length - shown.length}` : ''
+  if (shown.length)
+    return `${area.covers.length ? 'covers' : 'across'} ${shown.join(' ')}${more}`
+  return area.within ? `in <${area.within.tag}>` : 'on the page'
+}
+
+function areaSummary(area: ReviewArea): string {
+  return `An area of ${area.width} × ${area.height} px, drawn in a ${area.viewport.width} × ${area.viewport.height} window`
+}
+
 const paused = (comment: ReviewComment) =>
   comment.status === 'open' && !!comment.cancelledAt
 
@@ -351,7 +378,11 @@ export default function App({ root }: { root: Element }) {
     left: number
   }>()
   const [picking, setPicking] = useState(false)
+  const [drawing, setDrawing] = useState(false)
   const [target, setTarget] = useState<Element>()
+  // A drawn area shown again: while its chip is hovered, or for a moment once it is clicked.
+  const [targetArea, setTargetArea] = useState<ReviewArea>()
+  const [flashArea, setFlashArea] = useState<ReviewArea>()
   const [pendingCenter, setPendingCenter] = useState(
     readSession<PendingCenter>(CENTER_KEY),
   )
@@ -495,16 +526,37 @@ export default function App({ root }: { root: Element }) {
     flashTimer.current = setTimeout(() => setFlash(undefined), FLASH_MS)
   }, [])
 
+  const spotlightArea = useCallback(
+    (area: ReviewArea, id?: string) => {
+      scrollToArea(root, area)
+      if (id) setActiveId(id)
+      setFlashArea(area)
+      clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlashArea(undefined), FLASH_MS)
+    },
+    [root],
+  )
+
   useEffect(() => () => clearTimeout(flashTimer.current), [])
 
   useEffect(() => {
     if (!pendingCenter || route !== pendingCenter.path) return undefined
     const deadline = Date.now() + PENDING_CENTER_MS
     let frame = 0
+    const { anchor, id } = pendingCenter
     const attempt = () => {
-      const element = elementFromAnchor(root, pendingCenter.anchor)
-      if (element || Date.now() > deadline) {
-        if (element) spotlight(element, pendingCenter.id)
+      const { area } = anchor
+      // An area waits for the element it was drawn in; past the deadline, it shows where it was.
+      const late = Date.now() > deadline
+      if (area && (!area.within || holderOf(root, area) || late)) {
+        spotlightArea(area, id)
+        writeSession(CENTER_KEY, undefined)
+        setPendingCenter(undefined)
+        return
+      }
+      const element = elementFromAnchor(root, anchor)
+      if (element || late) {
+        if (element) spotlight(element, id)
         writeSession(CENTER_KEY, undefined)
         setPendingCenter(undefined)
         return
@@ -513,14 +565,15 @@ export default function App({ root }: { root: Element }) {
     }
     attempt()
     return () => cancelAnimationFrame(frame)
-  }, [pendingCenter, root, route, spotlight])
+  }, [pendingCenter, root, route, spotlight, spotlightArea])
 
-  const startDraft = useCallback((anchor: ReviewAnchor) => {
-    setDraft({ ...anchor, body: '' })
+  const startDraft = useCallback((anchor: ReviewAnchor, body = '') => {
+    setDraft({ ...anchor, body })
     setView('page')
     setThreadId(undefined)
     setOpen(true)
     setPicking(false)
+    setDrawing(false)
     setSelectionButton(undefined)
     window.getSelection()?.removeAllRanges()
   }, [])
@@ -531,6 +584,21 @@ export default function App({ root }: { root: Element }) {
   )
 
   const cancelPick = useCallback(() => setPicking(false), [])
+
+  // Drawn from a page-level draft, the area joins what the reader had written.
+  const keptBody = view === 'page' && draft ? draft.body : ''
+  const drawArea = useCallback(
+    (rect: ReviewBox) => startDraft(anchorFromArea(root, rect), keptBody),
+    [root, startDraft, keptBody],
+  )
+
+  const cancelDraw = useCallback(() => setDrawing(false), [])
+
+  const startDrawing = () => {
+    setPicking(false)
+    setSelectionButton(undefined)
+    setDrawing(true)
+  }
 
   const run = async (task: () => Promise<unknown>) => {
     setBusy(true)
@@ -703,6 +771,8 @@ export default function App({ root }: { root: Element }) {
   // The element the comment being written is about stays outlined, as its text would.
   const outlined =
     target ?? flash ?? (drafting ? elementFromAnchor(root, draft) : undefined)
+  // And so does the area it was drawn on.
+  const outlinedArea = targetArea ?? flashArea ?? (drafting ? draft.area : undefined)
 
   const centerOn = (anchor: ReviewAnchor, id?: string) => {
     const element = elementFromAnchor(root, anchor)
@@ -741,12 +811,41 @@ export default function App({ root }: { root: Element }) {
     )
   }
 
+  /** Like `elementChip`: hovered, the area shows again on the page; clicked, the page scrolls to it. */
+  const areaChip = (anchor: ReviewAnchor, href?: string, id?: string) => {
+    const { area } = anchor
+    if (!area) return null
+    const onThisPage = !href || new URL(href, window.location.href).pathname === route
+    return (
+      <span
+        className="cb-element cb-area-chip"
+        title={areaSummary(area)}
+        data-testid="cb-area-chip"
+        onMouseEnter={() => setTargetArea(onThisPage ? area : undefined)}
+        onMouseLeave={() => setTargetArea(undefined)}
+        onClick={(event) => {
+          event.stopPropagation()
+          if (onThisPage) return spotlightArea(area, id)
+          setTargetArea(undefined)
+          goToPage(href, anchor, id)
+        }}
+      >
+        <Icon name="frame" />
+        <code>
+          {area.width} × {area.height}
+        </code>
+        <span>{areaContents(area)}</span>
+      </span>
+    )
+  }
+
   const anchorDetails = (comment: ReviewComment) => (
     <>
       {comment.section && <span className="cb-section">{comment.section}</span>}
       {comment.quote && <blockquote className="cb-quote">{comment.quote}</blockquote>}
       {elementChip(comment, pagePath(comment.url) || comment.route, comment.id)}
-      {!comment.quote && !comment.element && (
+      {areaChip(comment, pagePath(comment.url) || comment.route, comment.id)}
+      {!comment.quote && !comment.element && !comment.area && (
         <span className="cb-section">{scopeLabel(comment)}</span>
       )}
     </>
@@ -977,8 +1076,10 @@ export default function App({ root }: { root: Element }) {
   return (
     <div className="cb">
       <ElementMarks root={root} comments={comments} onOpen={openFromPage} />
+      <AreaMarks root={root} comments={comments} onOpen={openFromPage} />
       <QuoteBubbles root={root} comments={comments} onOpen={openFromPage} />
       {outlined && <TargetOutline element={outlined} />}
+      {outlinedArea && !drawing && <AreaOutline root={root} area={outlinedArea} />}
       {picking && (
         <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />
       )}
@@ -1002,8 +1103,18 @@ export default function App({ root }: { root: Element }) {
             Comment
           </Button>
           <Button
+            variant="secondary"
+            icon={drawing ? 'x' : 'frame'}
+            onClick={() => (drawing ? setDrawing(false) : startDrawing())}
+          >
+            {drawing ? 'Cancel' : 'Draw area'}
+          </Button>
+          <Button
             icon={picking ? 'x' : 'cursor'}
-            onClick={() => setPicking((value) => !value)}
+            onClick={() => {
+              setDrawing(false)
+              setPicking((value) => !value)
+            }}
           >
             {picking ? 'Cancel' : 'Point at element'}
           </Button>
@@ -1015,6 +1126,7 @@ export default function App({ root }: { root: Element }) {
           className={`cb-panel cb-live ${docked ? 'cb-panel--docked' : ''}`}
           style={{ width }}
           data-closing={!open || undefined}
+          data-drawing={drawing || undefined}
           inert={!open}
           data-testid="code-buddy-panel"
         >
@@ -1079,13 +1191,32 @@ export default function App({ root }: { root: Element }) {
                   <blockquote className="cb-quote">{draft.quote}</blockquote>
                 )}
                 {elementChip(draft)}
-                {!draft.quote && !draft.element && (
-                  <Checkbox
-                    checked={!draft.app}
-                    onChange={(checked) => setDraft({ ...draft, app: !checked })}
-                  >
-                    Linked to the current page ({pagePath(window.location.href)})
-                  </Checkbox>
+                {draft.area && (
+                  <div className="cb-area-draft">
+                    {areaChip(draft)}
+                    <IconButton
+                      icon="x"
+                      label="Remove the area"
+                      onClick={() => {
+                        const { area: _, ...rest } = draft
+                        setTargetArea(undefined)
+                        setDraft({ ...rest, ...PAGE_LEVEL })
+                      }}
+                    />
+                  </div>
+                )}
+                {!draft.quote && !draft.element && !draft.area && (
+                  <div className="cb-draft-scope">
+                    <Checkbox
+                      checked={!draft.app}
+                      onChange={(checked) => setDraft({ ...draft, app: !checked })}
+                    >
+                      Linked to the current page ({pagePath(window.location.href)})
+                    </Checkbox>
+                    <Button small variant="tertiary" icon="frame" onClick={startDrawing}>
+                      Draw an area
+                    </Button>
+                  </div>
                 )}
               </div>
             )}
@@ -1164,6 +1295,7 @@ export default function App({ root }: { root: Element }) {
           </footer>
         </section>
       )}
+      {drawing && <AreaDrawer root={root} onDraw={drawArea} onCancel={cancelDraw} />}
       <Toasts />
     </div>
   )
