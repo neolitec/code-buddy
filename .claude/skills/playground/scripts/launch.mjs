@@ -3,6 +3,7 @@
 // prepare: builds the widget with its debug panel (npm run build:dev) when the
 //   bundle is missing, a release build or older than its sources, then refreshes
 //   the working copy .playground/ from playground/ (kept as it is with `keep`).
+//   PORT_BUSY lists what holds the ports: HOLDER <pid> <command>, one per process.
 // open: waits for the app and its Code Buddy server, then opens the app in the browser.
 import { spawn, spawnSync } from 'node:child_process'
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -30,6 +31,24 @@ function newest(dir) {
   return latest
 }
 
+/**
+ * The processes listening on `ports`, as `<pid> <command>` lines. Empty when
+ * lsof is missing (Windows) or finds none.
+ * @param {number[]} ports
+ */
+function holders(ports) {
+  const lsof = spawnSync(
+    'lsof',
+    ['-nP', '-t', ...ports.flatMap((port) => [`-iTCP:${port}`]), '-sTCP:LISTEN'],
+    { encoding: 'utf8' },
+  )
+  const pids = [...new Set((lsof.stdout ?? '').split('\n').filter(Boolean))]
+  return pids.map((pid) => {
+    const ps = spawnSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf8' })
+    return `${pid} ${(ps.stdout ?? '').trim()}`
+  })
+}
+
 /** Whether something answers at `url`. */
 async function answers(url) {
   try {
@@ -43,9 +62,19 @@ async function answers(url) {
 async function prepare(keep) {
   const busy = []
   if (await answers(config.devUrl)) busy.push(`app ${config.devUrl}`)
-  if (await answers(health)) busy.push(`Code Buddy server ${health}`)
+  if (await answers(health)) {
+    // Another clone's playground, most often: its server says which.
+    const served = await fetch(health)
+      .then((response) => response.json())
+      .then((body) => (typeof body?.project === 'string' ? ` for ${body.project}` : ''))
+      .catch(() => '')
+    busy.push(`Code Buddy server ${health}${served}`)
+  }
   if (busy.length) {
     console.log(`PORT_BUSY ${busy.join(', ')}`)
+    for (const holder of holders([Number(new URL(config.devUrl).port), config.port])) {
+      console.log(`HOLDER ${holder}`)
+    }
     process.exit(1)
   }
 
