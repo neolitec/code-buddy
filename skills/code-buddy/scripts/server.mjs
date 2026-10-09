@@ -103,13 +103,103 @@ async function readJson(req) {
   }
 }
 
-function sanitiseElement(element) {
-  if (!element || typeof element.selector !== 'string') return undefined
+/**
+ * @typedef {{ selector: string, tag: string, text: string }} AreaNode
+ * @typedef {{ top: number, left: number, width: number, height: number }} Box
+ * @typedef {Box & {
+ *   viewport: { width: number, height: number, scrollX: number, scrollY: number },
+ *   within?: AreaNode & { offset: Box, size: { width: number, height: number } },
+ *   covers: AreaNode[],
+ *   crosses: AreaNode[],
+ * }} Area
+ */
+
+/**
+ * An element the reader pointed at, or that a drawn area covers or crosses.
+ * The tag is normalised too: a line break in it would split the manager's line.
+ * @param {any} node
+ * @param {number} textLength
+ * @returns {AreaNode | undefined}
+ */
+function sanitiseNode(node, textLength) {
+  if (!node || typeof node.selector !== 'string') return undefined
   return {
-    selector: element.selector.slice(0, 500),
-    tag: String(element.tag ?? '').slice(0, 20),
-    text: normaliseQuote(String(element.text ?? '')).slice(0, 200),
-    html: normaliseQuote(String(element.html ?? '')).slice(0, 600),
+    selector: node.selector.slice(0, 500),
+    tag: normaliseQuote(String(node.tag ?? '')).slice(0, 20),
+    text: normaliseQuote(String(node.text ?? '')).slice(0, textLength),
+  }
+}
+
+/** @param {any} element */
+function sanitiseElement(element) {
+  const node = sanitiseNode(element, 200)
+  return (
+    node && { ...node, html: normaliseQuote(String(element.html ?? '')).slice(0, 600) }
+  )
+}
+
+const MAX_PIXELS = 1_000_000
+
+/**
+ * A length, or with `signed` a position: negative on a right-to-left page.
+ * @param {unknown} value
+ * @param {boolean} [signed]
+ */
+const pixels = (value, signed = false) =>
+  Math.min(Math.max(Math.round(Number(value) || 0), signed ? -MAX_PIXELS : 0), MAX_PIXELS)
+
+/**
+ * @param {any} box
+ * @returns {Box}
+ */
+const sanitiseBox = (box) => ({
+  top: pixels(box?.top, true),
+  left: pixels(box?.left, true),
+  width: pixels(box?.width),
+  height: pixels(box?.height),
+})
+
+/**
+ * @param {unknown} list
+ * @param {number} max
+ * @returns {AreaNode[]}
+ */
+const sanitiseNodes = (list, max) =>
+  (Array.isArray(list) ? list : []).slice(0, max).flatMap((node) => {
+    const sanitised = sanitiseNode(node, 80)
+    return sanitised ? [sanitised] : []
+  })
+
+/**
+ * A rectangle the reader drew over the page; one with no surface is none.
+ * @param {any} area
+ * @returns {Area | undefined}
+ */
+function sanitiseArea(area) {
+  if (!area || typeof area !== 'object') return undefined
+  const box = sanitiseBox(area)
+  if (!box.width || !box.height) return undefined
+  const within = sanitiseNode(area.within, 80)
+  const { offset, size } = area.within ?? {}
+  return {
+    ...box,
+    viewport: {
+      width: pixels(area.viewport?.width),
+      height: pixels(area.viewport?.height),
+      scrollX: pixels(area.viewport?.scrollX, true),
+      scrollY: pixels(area.viewport?.scrollY, true),
+    },
+    ...(within && offset && size
+      ? {
+          within: {
+            ...within,
+            offset: sanitiseBox(offset),
+            size: { width: pixels(size.width), height: pixels(size.height) },
+          },
+        }
+      : {}),
+    covers: sanitiseNodes(area.covers, 10),
+    crosses: sanitiseNodes(area.crosses, 6),
   }
 }
 
@@ -186,6 +276,7 @@ async function handle(req, res) {
         quote: normaliseQuote(String(input.quote ?? '')).slice(0, 2000),
         occurrence: Math.max(0, Math.floor(Number(input.occurrence) || 0)),
         element: sanitiseElement(input.element),
+        area: sanitiseArea(input.area),
       })
       return send(res, 201, comment, cors)
     }
@@ -227,14 +318,31 @@ function latestFollowUp(comment) {
  */
 const quoted = (text) => JSON.stringify(text)
 
+/** @param {{ tag: string, text: string }} node */
+const nodeLabel = (node) => `<${node.tag}> ${node.text.slice(0, 40)}`.trim()
+
+/**
+ * Where the area is and what it holds, for the manager to pass on: its size and
+ * corner on the page, the element it lies in, and those it covers or crosses.
+ * @param {Area} area
+ */
+function describeArea(area) {
+  const within = area.within ? ` within=${quoted(nodeLabel(area.within))}` : ''
+  /** @param {AreaNode[]} list */
+  const nodes = (list) => JSON.stringify(list.map(nodeLabel))
+  return `area=${area.width}x${area.height}@${area.left},${area.top}${within} covers=${nodes(area.covers)} crosses=${nodes(area.crosses)}`
+}
+
 function describe(comment) {
   const where = comment.element
     ? `element=<${comment.element.tag}> ${quoted(comment.element.text.slice(0, 80))}`
-    : comment.quote
-      ? `quote=${quoted(comment.quote.slice(0, 120))}`
-      : comment.route === APP_ROUTE
-        ? 'app-level'
-        : 'page-level'
+    : comment.area
+      ? describeArea(comment.area)
+      : comment.quote
+        ? `quote=${quoted(comment.quote.slice(0, 120))}`
+        : comment.route === APP_ROUTE
+          ? 'app-level'
+          : 'page-level'
   const section = comment.section ? ` section=${quoted(comment.section)}` : ''
   const url = comment.url ? ` url=${comment.url}` : ''
   const reply = latestReply(comment)

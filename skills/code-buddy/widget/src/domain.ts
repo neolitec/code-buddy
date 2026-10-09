@@ -13,6 +13,34 @@ export interface ReviewElement {
   html: string
 }
 
+/** An element an area covers or cuts through: enough to find it in the code. */
+export type ReviewNode = Omit<ReviewElement, 'html'>
+
+/** A box, in CSS pixels. */
+export interface ReviewBox {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+/** A rectangle the reader drew over the page. */
+export interface ReviewArea extends ReviewBox {
+  /** The viewport's size and scroll when it was drawn; `top` and `left` are from the page's corner. */
+  viewport: { width: number; height: number; scrollX: number; scrollY: number }
+  /**
+   * The smallest element holding the whole area (its holder), the area's box
+   * from the holder's corner, and the holder's size then: the area is found
+   * again in it, its width scaled with the holder's, on another viewport or
+   * after a layout change.
+   */
+  within?: ReviewNode & { offset: ReviewBox; size: { width: number; height: number } }
+  /** Elements wholly inside the area, the outermost ones only. */
+  covers: ReviewNode[]
+  /** Elements the area cuts through, such as the two blocks around a gap. */
+  crosses: ReviewNode[]
+}
+
 export interface ReviewAnchor {
   /** Heading the quote sits under, for a human reader of the JSON file. */
   section: string
@@ -22,6 +50,8 @@ export interface ReviewAnchor {
   occurrence: number
   /** Set when the reader pointed at an element instead of selecting text. */
   element?: ReviewElement
+  /** Set when the reader drew a rectangle over the page. */
+  area?: ReviewArea
 }
 
 export interface ReviewProgress {
@@ -89,7 +119,7 @@ export interface ReviewComment extends ReviewAnchor {
 
 export type NewReviewComment = Pick<
   ReviewComment,
-  'route' | 'url' | 'body' | 'section' | 'quote' | 'occurrence' | 'element'
+  'route' | 'url' | 'body' | 'section' | 'quote' | 'occurrence' | 'element' | 'area'
 >
 
 export type ReviewCommentPatch = Partial<

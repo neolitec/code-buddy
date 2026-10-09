@@ -1,16 +1,16 @@
 ---
 name: code-buddy
 description:
-  Code Buddy turns feedback on a running frontend app into code changes.
-  The user comments directly on the dev app in the browser (select text, point
-  at an element, or write about the page or the whole app); one background
-  agent per comment makes the change and answers in the same thread.
+  Code Buddy turns feedback on a running frontend app into code changes. The
+  user comments directly on the dev app in the browser (select text, point at
+  an element, draw an area, or write about the page or the whole app); one
+  background agent per comment makes the change and answers in the same thread.
   "/code-buddy:code-buddy [dir]" starts the session (the widget only exists
   while it runs); "/code-buddy:code-buddy init [dir]" installs it in the
-  current project or in its folder `dir` (e.g. `web`), "update" and
-  "uninstall" maintain it. Use when the user wants to give feedback on the app
-  in the browser, to follow or answer that feedback, to install or remove the
-  feedback widget, or says "/code-buddy" or "/code-buddy:code-buddy".
+  current project or in its folder `dir` (e.g. `web`), "update" and "uninstall"
+  maintain it. Use when the user wants to give feedback on the app in the
+  browser, to follow or answer that feedback, to install or remove the feedback
+  widget, or says "/code-buddy" or "/code-buddy:code-buddy".
 ---
 
 # Code Buddy
@@ -95,8 +95,9 @@ answer to the same subagent.
 >    cancelled, resolved or is waiting on the reader, stop and reply
 >    `CANCELLED`.
 > 2. Read the entry in `<commentsFile>` if the line is not enough: `route`,
->    `url`, `section`, and a text `quote` or a pointed `element` (selector from
->    `body`, tag, text, HTML excerpt). `route` `*` means the whole app.
+>    `url`, `section`, and a text `quote`, a pointed `element` (selector from
+>    `body`, tag, text, HTML excerpt) or a drawn `area` (box, `viewport`,
+>    `within`, `covers`, `crosses`). `route` `*` means the whole app.
 >    `messages` holds the thread after the question: your earlier answers
 >    (`claude`) were applied; act on the reader's last message. A
 >    `cancellation` field lists files an earlier, stopped agent left changed:
