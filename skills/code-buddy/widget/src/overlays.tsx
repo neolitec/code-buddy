@@ -392,6 +392,8 @@ export function ElementPicker({
   }, [root, onPick, onCancel])
 
   const rect = hovered?.getBoundingClientRect()
+  // The element's shape too: its rounded corners, which the outline morphs to.
+  const radius = hovered && getComputedStyle(hovered).borderRadius
   return (
     <>
       <div className="cb-hint">Click an element to comment on it. Escape cancels.</div>
@@ -404,6 +406,7 @@ export function ElementPicker({
             transform: `translate(${rect.left}px, ${rect.top}px)`,
             width: rect.width,
             height: rect.height,
+            borderRadius: radius || undefined,
           }}
         >
           <span>{hovered?.tagName.toLowerCase()}</span>

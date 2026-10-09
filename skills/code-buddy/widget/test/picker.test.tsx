@@ -52,6 +52,19 @@ test('the outline glides to the next element rather than appearing anew', () => 
   expect(shown?.hasAttribute('data-instant')).toBe(false)
 })
 
+test("the outline takes the element's rounded corners", () => {
+  const { root, first, text, hover } = page()
+  text?.setAttribute('style', 'border-radius: 12px')
+  first?.setAttribute('style', 'border-radius: 8px 4px')
+  render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
+
+  act(() => hover(text))
+  expect(outline()?.style.borderRadius).toBe('12px')
+
+  act(() => hover(first))
+  expect(outline()?.style.borderRadius).toBe('8px 4px')
+})
+
 test('across a gap between two elements, the outline fades out and glides on', () => {
   const { root, first, second, hover } = page()
   render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
