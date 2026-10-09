@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
 import { type ReviewComment, wasResolved } from './domain'
@@ -17,6 +17,25 @@ interface Box {
 const boxOf = (element: Element): Box => {
   const { top, left, width, height } = element.getBoundingClientRect()
   return { top, left, width, height }
+}
+
+type Corners = Pick<
+  CSSProperties,
+  | 'borderTopLeftRadius'
+  | 'borderTopRightRadius'
+  | 'borderBottomRightRadius'
+  | 'borderBottomLeftRadius'
+>
+
+/** The rounded corners of `element`, for a frame on its box. */
+const cornersOf = (element: Element): Corners => {
+  const style = getComputedStyle(element)
+  return {
+    borderTopLeftRadius: style.borderTopLeftRadius || '0px',
+    borderTopRightRadius: style.borderTopRightRadius || '0px',
+    borderBottomRightRadius: style.borderBottomRightRadius || '0px',
+    borderBottomLeftRadius: style.borderBottomLeftRadius || '0px',
+  }
 }
 
 const sameBox = (a?: Box, b?: Box) =>
@@ -75,6 +94,7 @@ function useTracked<Found, Measured>(
 
 interface Mark extends Box {
   comment: ReviewComment
+  corners: Corners
 }
 
 function findElements(root: Element, comments: ReviewComment[]) {
@@ -86,7 +106,11 @@ function findElements(root: Element, comments: ReviewComment[]) {
 }
 
 function measureElements(found: ReturnType<typeof findElements>): Mark[] {
-  return found.map(({ comment, element }) => ({ comment, ...boxOf(element) }))
+  return found.map(({ comment, element }) => ({
+    comment,
+    ...boxOf(element),
+    corners: cornersOf(element),
+  }))
 }
 
 /**
@@ -107,8 +131,12 @@ export function ElementMarks({
 
   return (
     <>
-      {marks.map(({ comment, top, left, width, height }) => (
-        <div key={comment.id} className="cb-mark" style={{ top, left, width, height }}>
+      {marks.map(({ comment, top, left, width, height, corners }) => (
+        <div
+          key={comment.id}
+          className="cb-mark"
+          style={{ top, left, width, height, ...corners }}
+        >
           <button
             type="button"
             className="cb-quote-pin cb-mark-pin cb-live"
@@ -317,10 +345,8 @@ export function TargetOutline({ element }: { element: Element }) {
       className="cb-outline"
       data-testid="cb-target"
       style={{
-        top: box.top - 4,
-        left: box.left - 4,
-        width: box.width + 8,
-        height: box.height + 8,
+        ...box,
+        ...cornersOf(element),
       }}
     />
   )
@@ -404,8 +430,6 @@ export function ElementPicker({
   }, [root, onPick, onCancel])
 
   const rect = hovered?.getBoundingClientRect()
-  // The element's shape too: its rounded corners, which the outline morphs to.
-  const radius = hovered && getComputedStyle(hovered).borderRadius
   return (
     <>
       <div className="cb-hint">Click an element to comment on it. Escape cancels.</div>
@@ -418,7 +442,8 @@ export function ElementPicker({
             transform: `translate(${rect.left}px, ${rect.top}px)`,
             width: rect.width,
             height: rect.height,
-            borderRadius: radius || undefined,
+            // Its shape too: the outline morphs to its rounded corners.
+            ...(hovered && cornersOf(hovered)),
           }}
         >
           <span>{hovered?.tagName.toLowerCase()}</span>

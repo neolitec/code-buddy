@@ -113,6 +113,7 @@ async function pickTitle() {
   renderWidget()
   const title = document.querySelector('h1')
   if (!title) throw new Error('no title')
+  title.style.borderRadius = '12px'
   const pointed = vi.spyOn(document, 'elementFromPoint').mockReturnValue(title)
   onTestFinished(() => pointed.mockRestore())
 
@@ -128,6 +129,24 @@ test('the picked element stays outlined while the comment is written', async () 
   await screen.findByTestId('cb-target')
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   await waitFor(() => expect(screen.queryByTestId('cb-target')).toBeNull())
+})
+
+test("the picked element's frames sit on it, with its rounded corners", async () => {
+  const box = await pickTitle()
+  // On the title's box, not around it.
+  const outline = await screen.findByTestId('cb-target')
+  expect([outline.style.top, outline.style.width, outline.style.borderRadius]).toEqual([
+    '100px',
+    '200px',
+    '12px',
+  ])
+
+  fireEvent.change(box, { target: { value: 'Make the title bigger' } })
+  fireEvent.keyDown(box, { key: 'Enter' })
+
+  await waitFor(() => expect(marks()).toHaveLength(1))
+  const [mark] = marks()
+  expect(mark instanceof HTMLElement && mark.style.borderRadius).toBe('12px')
 })
 
 test('the picked element turns in progress once its comment is saved', async () => {

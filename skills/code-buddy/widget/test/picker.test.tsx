@@ -65,7 +65,10 @@ test("the outline takes the element's rounded corners", () => {
   expect(outline()?.style.borderRadius).toBe('12px')
 
   act(() => hover(first))
-  expect(outline()?.style.borderRadius).toBe('8px 4px')
+  expect([
+    outline()?.style.borderTopLeftRadius,
+    outline()?.style.borderTopRightRadius,
+  ]).toEqual(['8px', '4px'])
 })
 
 test('the outline moves only once the pointer stays on an element', () => {
