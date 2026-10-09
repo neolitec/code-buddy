@@ -339,7 +339,10 @@ export function ElementPicker({
   onPick: (element: Element) => void
   onCancel: () => void
 }) {
+  // The last element hovered: off it (a gap between two, the widget), the
+  // outline fades out where it is, and glides from there to the next.
   const [hovered, setHovered] = useState<Element>()
+  const [over, setOver] = useState(false)
   // After a scroll, the outline stays on its element: it moves at once.
   const [scrolled, setScrolled] = useState(false)
   const [, setTick] = useState(0)
@@ -355,7 +358,9 @@ export function ElementPicker({
         : undefined
     }
     const onMove = (event: MouseEvent) => {
-      setHovered(target(event))
+      const element = target(event)
+      if (element) setHovered(element)
+      setOver(!!element)
       setScrolled(false)
     }
     const onClick = (event: MouseEvent) => {
@@ -394,6 +399,7 @@ export function ElementPicker({
         <div
           className="cb-hover"
           data-instant={scrolled || undefined}
+          data-hidden={!over || undefined}
           style={{
             transform: `translate(${rect.left}px, ${rect.top}px)`,
             width: rect.width,

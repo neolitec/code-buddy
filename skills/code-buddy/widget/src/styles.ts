@@ -276,9 +276,10 @@ code { font-family: var(--cb-mono); }
 .cb-mark-pin { position: absolute; top: 0; left: 0; }
 .cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
 .cb-hover { position: fixed; top: 0; left: 0; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
-/* It glides from one element to the next (its size, not a scale: the border and the label keep theirs), and fades in at first. */
-.cb-hover { transition-property: transform, width, height; transition-duration: ${HOVER_MORPH_MS}ms; transition-timing-function: ease-out; animation: cb-fade-in ${HOVER_MORPH_MS}ms ease-out; }
+/* It glides from one element to the next (its size, not a scale: the border and the label keep theirs), fades in at first, and out off an element. */
+.cb-hover { transition-property: transform, width, height, opacity; transition-duration: ${HOVER_MORPH_MS}ms; transition-timing-function: ease-out; animation: cb-fade-in ${HOVER_MORPH_MS}ms ease-out; }
 .cb-hover[data-instant] { transition: none; }
+.cb-hover[data-hidden] { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .cb-hover { transition: none; animation: none; } }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
 .cb-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--cb-radius); background: var(--cb-text); color: #fff; font-size: 13px; pointer-events: none; }

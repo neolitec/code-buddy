@@ -8,9 +8,11 @@ function page() {
   root.innerHTML = '<table><tr><td>One</td><td>Two</td></tr></table><p>Text</p>'
   document.body.append(root)
   const [first, second] = Array.from(root.querySelectorAll('td'))
+  const text = root.querySelector('p') ?? undefined
   const boxes = new Map<Element | undefined, DOMRect>([
     [first, DOMRect.fromRect({ x: 10, y: 20, width: 100, height: 30 })],
     [second, DOMRect.fromRect({ x: 110, y: 20, width: 80, height: 30 })],
+    [text, DOMRect.fromRect({ x: 10, y: 70, width: 180, height: 20 })],
   ])
   const box = vi
     .spyOn(Element.prototype, 'getBoundingClientRect')
@@ -18,35 +20,53 @@ function page() {
       return boxes.get(this) ?? DOMRect.fromRect()
     })
   let under: Element | null = null
-  vi.spyOn(document, 'elementFromPoint').mockImplementation(() => under)
+  const point = vi.spyOn(document, 'elementFromPoint').mockImplementation(() => under)
   onTestFinished(() => {
     box.mockRestore()
+    point.mockRestore()
     root.remove()
   })
-  /** The pointer moves over `element`. */
+  /** The pointer moves over `element`, or over nothing to pick. */
   const hover = (element: Element | undefined) => {
     under = element ?? null
     fireEvent.mouseMove(document)
   }
-  return { root, first, second, boxes, hover }
+  return { root, first, second, text, boxes, hover }
 }
 
 const outline = () => document.querySelector<HTMLElement>('.cb-hover')
 
 test('the outline glides to the next element rather than appearing anew', () => {
+  const { root, first, text, hover } = page()
+  render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
+
+  act(() => hover(first))
+  const shown = outline()
+  act(() => hover(text))
+
+  // The same outline, moved by its transform: a transition can carry it there.
+  expect(outline()).toBe(shown)
+  expect(shown?.style.transform).toBe('translate(10px, 70px)')
+  expect(shown?.style.width).toBe('180px')
+  expect(shown?.textContent).toBe('p')
+  expect(shown?.hasAttribute('data-instant')).toBe(false)
+})
+
+test('across a gap between two elements, the outline fades out and glides on', () => {
   const { root, first, second, hover } = page()
   render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
 
   act(() => hover(first))
   const shown = outline()
-  act(() => hover(second))
+  act(() => hover(root))
 
-  // The same outline, moved by its transform: a transition can carry it there.
   expect(outline()).toBe(shown)
+  expect(shown?.hasAttribute('data-hidden')).toBe(true)
+
+  act(() => hover(second))
+  expect(outline()).toBe(shown)
+  expect(shown?.hasAttribute('data-hidden')).toBe(false)
   expect(shown?.style.transform).toBe('translate(110px, 20px)')
-  expect(shown?.style.width).toBe('80px')
-  expect(shown?.textContent).toBe('td')
-  expect(shown?.hasAttribute('data-instant')).toBe(false)
 })
 
 test('after a scroll, the outline follows its element at once', () => {
