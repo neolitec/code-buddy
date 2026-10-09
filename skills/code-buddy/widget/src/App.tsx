@@ -32,6 +32,7 @@ import {
   isAsking,
   threadOf,
 } from './domain'
+import { DebugPanel, DebugToggle } from './debug'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
 import { ElementMarks, ElementPicker, QuoteBubbles, TargetOutline } from './overlays'
 import {
@@ -1044,6 +1045,7 @@ export default function App({ root }: { root: Element }) {
               </h2>
             </div>
             <div className="cb-header-actions">
+              {CODE_BUDDY_DEBUG && <DebugToggle />}
               {view !== 'all' && (
                 <IconButton
                   icon="chats"
@@ -1163,6 +1165,12 @@ export default function App({ root }: { root: Element }) {
             )}
           </footer>
         </section>
+      )}
+      {CODE_BUDDY_DEBUG && (
+        <DebugPanel
+          held={[...comments, ...all.comments, ...(created ? [created] : [])]}
+          {...(openedId ? { current: openedId } : {})}
+        />
       )}
       <Toasts />
     </div>

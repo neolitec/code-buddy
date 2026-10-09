@@ -34,7 +34,8 @@ browser, and one background agent per comment makes the change. See the
   Claude Code (2.1.287 or later; not in CI, run it when `hooks/` changes).
 - `npm run format`: apply Prettier.
 - `npm run build`: rebuild `widget/dist/` (the bundle and its third-party
-  licenses).
+  licenses). `npm run build:dev`: the same with the debug panel (Alt+Shift+D),
+  behind `CODE_BUDDY_DEBUG`, which `/playground` builds.
 - `/playground`: try Code Buddy on the playground. A session started here
   loads the plugin from the clone (`.claude/skills/code-buddy` links to the
   root; `.claude/settings.json` disables the installed one): no `--plugin-dir`.

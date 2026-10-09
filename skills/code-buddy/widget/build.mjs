@@ -1,6 +1,15 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { parseArgs } from 'node:util'
 import { build } from 'esbuild'
+
+// --dev: the build /playground uses, with the debug panel. --outdir: somewhere else than dist/.
+const { values: options } = parseArgs({
+  options: {
+    dev: { type: 'boolean', default: false },
+    outdir: { type: 'string', default: 'dist' },
+  },
+})
 
 // The widget shows the plugin's version: plugin.json is its only source.
 const { version } = JSON.parse(
@@ -9,7 +18,7 @@ const { version } = JSON.parse(
 
 const result = await build({
   entryPoints: ['src/main.tsx'],
-  outfile: 'dist/widget.js',
+  outfile: path.join(options.outdir, 'widget.js'),
   bundle: true,
   format: 'esm',
   target: 'es2022',
@@ -23,8 +32,14 @@ const result = await build({
   define: {
     'process.env.NODE_ENV': '"production"',
     CODE_BUDDY_VERSION: JSON.stringify(version),
+    // false drops the debug panel from the bundle: the released one never has it.
+    CODE_BUDDY_DEBUG: JSON.stringify(options.dev),
   },
-  banner: { js: '/* code-buddy widget: served by the code-buddy skill in dev only */' },
+  banner: {
+    js: options.dev
+      ? '/* code-buddy widget (dev build, with the debug panel): served by the code-buddy skill in dev only */'
+      : '/* code-buddy widget: served by the code-buddy skill in dev only */',
+  },
 })
 
 // Their licenses ask for their full text to ship with them: collect it from every
@@ -49,7 +64,7 @@ const notices = [...packageDirs]
 const ofl = readFileSync('src/assets/fonts/OFL.txt', 'utf8').trim()
 notices.push(`Figtree (OFL-1.1)\n\n${ofl}\n`)
 writeFileSync(
-  'dist/THIRD_PARTY_LICENSES.txt',
+  path.join(options.outdir, 'THIRD_PARTY_LICENSES.txt'),
   `The Code Buddy widget (widget.js) bundles the following packages and font.\n\n${notices.join(
     `\n${'-'.repeat(80)}\n\n`,
   )}`,

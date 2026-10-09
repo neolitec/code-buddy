@@ -58,8 +58,8 @@ Mode, then `git config core.symlinks true` before cloning).
 Edits are read from your clone: after a change to `skills/code-buddy/SKILL.md`
 or `hooks/`, run `/reload-plugins` before the next `/playground`.
 
-It builds the widget when `widget/dist/` is missing or older than
-`widget/src/`, copies `playground/` to `.playground/` (git-ignored), starts the
+It builds the widget (a dev build, see below) when `widget/dist/` is missing,
+a release build or older than `widget/src/`, copies `playground/` to `.playground/` (git-ignored), starts the
 app there on <http://localhost:5190>, runs `/code-buddy:code-buddy .playground`
 and opens the app in your browser. Comment on it: the agents edit
 `.playground/`, so `git status` stays clean. `/playground` starts again from
@@ -67,6 +67,12 @@ a fresh copy, comments included; `/playground keep` keeps the copy and the
 changes made to it. To change the playground itself (a page for a new
 feature), edit `playground/` and commit it like the rest. `npm run playground`
 serves the committed app alone, without Code Buddy.
+
+The dev build (`npm run build:dev`) adds a **debug panel** to the widget: the
+wrench in the panel's header, or Alt+Shift+D, shows every comment as the widget
+holds it, its fields, its conversation in order (messages, progress steps,
+status changes) and its raw JSON, live. `npm run build` leaves it out: the
+released `widget.js` has none of its code (`test/bundle.test.mjs` checks it).
 
 To try a change in an app of your own instead, start Claude Code in it with
 `claude --plugin-dir ~/dev/code-buddy`, after `claude plugin disable
@@ -108,6 +114,7 @@ It runs, in order:
 | `npm run lint`         | [Oxlint](https://oxc.rs/docs/guide/usage/linter), type-aware         |
 | `npm run typecheck`    | [TypeScript](https://www.typescriptlang.org) 7, strict, on the widget and the scripts |
 | `npm run build`        | Type-checks and bundles the widget into `widget/dist/widget.js`, with the licenses of the packages it bundles in `THIRD_PARTY_LICENSES.txt` |
+| `npm run build:dev`    | The same, with the debug panel: the build `/playground` uses          |
 | `npm test`             | [`node:test`](https://nodejs.org/api/test.html) suites in `test/`: file locks, store, server, widget wording, playground; then the widget's component tests in `widget/test/`: [Vitest](https://vitest.dev) with [happy-dom](https://github.com/capricorn86/happy-dom) and [Testing Library](https://testing-library.com/docs/react-testing-library/intro) |
 
 `npm run test:hooks` checks the hooks module with Claude Code itself
