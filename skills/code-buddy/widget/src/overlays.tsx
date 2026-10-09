@@ -326,7 +326,10 @@ export function TargetOutline({ element }: { element: Element }) {
   )
 }
 
-/** Dashed outline follows the pointer; a click picks the element, Escape cancels. */
+/**
+ * Dashed outline follows the pointer, gliding from one element to the next; a
+ * click picks the element, Escape cancels.
+ */
 export function ElementPicker({
   root,
   onPick,
@@ -337,6 +340,8 @@ export function ElementPicker({
   onCancel: () => void
 }) {
   const [hovered, setHovered] = useState<Element>()
+  // After a scroll, the outline stays on its element: it moves at once.
+  const [scrolled, setScrolled] = useState(false)
   const [, setTick] = useState(0)
 
   useEffect(() => {
@@ -349,7 +354,10 @@ export function ElementPicker({
         ? element
         : undefined
     }
-    const onMove = (event: MouseEvent) => setHovered(target(event))
+    const onMove = (event: MouseEvent) => {
+      setHovered(target(event))
+      setScrolled(false)
+    }
     const onClick = (event: MouseEvent) => {
       const element = target(event)
       if (!element) return
@@ -360,7 +368,10 @@ export function ElementPicker({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCancel()
     }
-    const onScroll = () => setTick((tick) => tick + 1)
+    const onScroll = () => {
+      setScrolled(true)
+      setTick((tick) => tick + 1)
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('click', onClick, true)
     document.addEventListener('keydown', onKey)
@@ -382,9 +393,9 @@ export function ElementPicker({
       {rect && (
         <div
           className="cb-hover"
+          data-instant={scrolled || undefined}
           style={{
-            top: rect.top,
-            left: rect.left,
+            transform: `translate(${rect.left}px, ${rect.top}px)`,
             width: rect.width,
             height: rect.height,
           }}
