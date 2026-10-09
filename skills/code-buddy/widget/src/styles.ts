@@ -265,7 +265,7 @@ code { font-family: var(--cb-mono); }
 }
 @keyframes cb-unicorn { to { --code-buddy-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .cb-mark::before { animation: none; } }
-.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: -20px 0 0 -4px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
+.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -22px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
 .cb-quote-pin svg { width: 12px; height: 12px; }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
 /* On an element: its top right corner, the tail towards it. */
