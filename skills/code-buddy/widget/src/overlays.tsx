@@ -88,15 +88,16 @@ function measureElements(found: ReturnType<typeof findElements>): Mark[] {
   return found.map(({ id, index, element }) => ({ id, index, ...boxOf(element) }))
 }
 
-/** Numbered frames around the elements that open comments point at. */
+/**
+ * Numbered frames around the elements that open comments point at, until
+ * Claude resolves their thread.
+ */
 export function ElementMarks({
   root,
   comments,
-  activeId,
 }: {
   root: Element
   comments: ReviewComment[]
-  activeId?: string | undefined
 }) {
   const marks = useTracked(root, comments, findElements, measureElements)
 
@@ -105,7 +106,7 @@ export function ElementMarks({
       {marks.map((mark) => (
         <div
           key={mark.id}
-          className={`cb-mark ${mark.id === activeId ? 'cb-mark--active' : ''}`}
+          className="cb-mark"
           style={{
             top: mark.top,
             left: mark.left,
@@ -157,12 +158,10 @@ function measureQuotes(found: ReturnType<typeof findQuotes>): QuotePin[] {
 export function QuoteBubbles({
   root,
   comments,
-  activeId,
   onOpen,
 }: {
   root: Element
   comments: ReviewComment[]
-  activeId?: string | undefined
   onOpen: (comment: ReviewComment) => void
 }) {
   const pins = useTracked(root, comments, findQuotes, measureQuotes)
@@ -173,7 +172,7 @@ export function QuoteBubbles({
         <button
           key={comment.id}
           type="button"
-          className={`cb-quote-pin cb-live ${comment.id === activeId ? 'cb-quote-pin--active' : ''}`}
+          className="cb-quote-pin cb-live"
           style={{ top, left }}
           aria-label={`Open the comment on “${comment.quote}”`}
           title={comment.body}

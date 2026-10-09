@@ -30,12 +30,13 @@ export const WIDGET_CSS = `
   --cb-red: #d23f3f;
   --cb-red-bg: #fdecec;
   --cb-yellow: #f0ad2e;
-  --cb-yellow-dark: #b7791f;
   --cb-amber-bg: #fdf3e1;
   --cb-amber-fg: #7a4e0e;
   --cb-amber-ink: #4a2f06;
   --cb-amber-border: #f2d9a8;
   --cb-bubble: #eff3f8;
+  /* The in-progress rainbow, dark enough for white text. */
+  --cb-unicorn: linear-gradient(135deg, #d6336c, #7048e8 50%, #1c7ed6);
   --cb-radius: 8px;
   --cb-shadow: 0 8px 32px rgba(16, 36, 74, 0.18);
   --cb-font: 'Code Buddy Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -249,13 +250,22 @@ code { font-family: var(--cb-mono); }
 .cb-element code { color: var(--cb-accent); }
 .cb-element span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.cb-mark { position: fixed; pointer-events: none; border: 2px solid var(--cb-yellow); border-radius: 4px; background: rgba(255, 196, 0, .1); }
-.cb-mark--active { border-color: var(--cb-red); background: rgba(255, 140, 0, .12); }
-.cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-yellow-dark); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -32px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-yellow-dark); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s, background .15s; }
+/* In progress: the comment is open, until Claude resolves its thread. A rainbow
+   turns around it (--code-buddy-angle is registered in PAGE_CSS: a shadow root cannot). */
+.cb-mark { position: fixed; pointer-events: none; border-radius: 4px; background: rgba(166, 107, 255, .06); }
+.cb-mark::before {
+  content: ''; position: absolute; inset: 0; padding: 2px; border-radius: inherit;
+  background: conic-gradient(from var(--code-buddy-angle, 0deg), #ff5f9e, #ffb340, #ffe14d, #3ddc97, #3fa7ff, #a66bff, #ff5f9e);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: cb-unicorn 3s linear infinite;
+}
+@keyframes cb-unicorn { to { --code-buddy-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .cb-mark::before { animation: none; } }
+.cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-unicorn); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -32px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
 .cb-quote-pin svg { width: 12px; height: 12px; }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
-.cb-quote-pin--active { background: var(--cb-accent); }
 .cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
 .cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
@@ -275,7 +285,7 @@ code { font-family: var(--cb-mono); }
 export const PAGE_CSS = `
 @font-face { font-family: 'Code Buddy Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(${figtree}) format('woff2'); }
 @font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
-::highlight(code-buddy) { background-color: rgba(255, 213, 79, 0.45); }
-::highlight(code-buddy-active) { background-color: rgba(255, 152, 0, 0.55); }
+@property --code-buddy-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+::highlight(code-buddy) { background-color: rgba(166, 107, 255, 0.25); }
 ::highlight(code-buddy-draft) { background-color: rgba(33, 110, 192, 0.25); }
 `

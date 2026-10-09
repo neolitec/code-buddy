@@ -9,6 +9,11 @@ released to the `stable` branch.
 
 ### Changed
 
+- **The page shows where each comment stands.** Blue while the reader picks
+  an element or text, and while the comment on it is written (the picked
+  element stays outlined); a turning rainbow, and a violet highlight on a
+  text, while its thread is open; nothing once it is resolved. The red outline
+  and orange highlight of the active comment are gone.
 - **Code Buddy now needs Claude Code 2.1.287 or later.** Its hooks are a
   Claude Code mod, loaded once per session: they start no process per tool
   call, where the shell hooks started Node twice for each tool call of an

@@ -393,7 +393,7 @@ export default function App({ root }: { root: Element }) {
     const drafted = draftQuote
       ? { section: '', quote: draftQuote, occurrence: draftOccurrence }
       : undefined
-    const paint = () => paintHighlights(root, comments, activeId, drafted)
+    const paint = () => paintHighlights(root, comments, drafted)
     paint()
     const observer = new MutationObserver(paint)
     observer.observe(root, { childList: true, subtree: true, characterData: true })
@@ -401,7 +401,7 @@ export default function App({ root }: { root: Element }) {
       observer.disconnect()
       clearHighlights()
     }
-  }, [root, comments, activeId, draftQuote, draftOccurrence])
+  }, [root, comments, draftQuote, draftOccurrence])
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -700,7 +700,9 @@ export default function App({ root }: { root: Element }) {
     </Button>
   )
 
-  const outlined = target ?? flash
+  // The element the comment being written is about stays outlined, as its text would.
+  const outlined =
+    target ?? flash ?? (drafting ? elementFromAnchor(root, draft) : undefined)
 
   const centerOn = (anchor: ReviewAnchor, id?: string) => {
     const element = elementFromAnchor(root, anchor)
@@ -974,13 +976,8 @@ export default function App({ root }: { root: Element }) {
 
   return (
     <div className="cb">
-      <ElementMarks root={root} comments={comments} activeId={activeId} />
-      <QuoteBubbles
-        root={root}
-        comments={comments}
-        activeId={activeId}
-        onOpen={openFromPage}
-      />
+      <ElementMarks root={root} comments={comments} />
+      <QuoteBubbles root={root} comments={comments} onOpen={openFromPage} />
       {outlined && <TargetOutline element={outlined} />}
       {picking && (
         <ElementPicker root={root} onPick={pickElement} onCancel={cancelPick} />

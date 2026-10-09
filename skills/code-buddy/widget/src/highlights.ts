@@ -1,8 +1,8 @@
 import type { ReviewAnchor, ReviewComment } from './domain'
 import { elementFromAnchor, rangeFromAnchor, rangesFromAnchors } from './anchors'
 
+/** The text of the open comments: highlighted until Claude resolves their thread. */
 export const HIGHLIGHT_NAME = 'code-buddy'
-export const ACTIVE_HIGHLIGHT_NAME = 'code-buddy-active'
 /** The text the comment being written is about, until it is saved. */
 export const DRAFT_HIGHLIGHT_NAME = 'code-buddy-draft'
 
@@ -13,7 +13,6 @@ function highlightsApi() {
 export function paintHighlights(
   root: Element,
   comments: ReviewComment[],
-  activeId?: string,
   draft?: ReviewAnchor,
 ): void {
   const highlights = highlightsApi()
@@ -23,20 +22,13 @@ export function paintHighlights(
     draft ?? { section: '', quote: '', occurrence: 0 },
     ...open,
   ])
-  const ranges: Range[] = []
-  const active: Range[] = []
-  open.forEach((comment, i) => {
-    const range = found[i]
-    if (range) (comment.id === activeId ? active : ranges).push(range)
-  })
+  const ranges = found.filter((range) => range !== undefined)
   highlights.set(HIGHLIGHT_NAME, new Highlight(...ranges))
-  highlights.set(ACTIVE_HIGHLIGHT_NAME, new Highlight(...active))
   highlights.set(DRAFT_HIGHLIGHT_NAME, drafted ? new Highlight(drafted) : new Highlight())
 }
 
 export function clearHighlights(): void {
   highlightsApi()?.delete(HIGHLIGHT_NAME)
-  highlightsApi()?.delete(ACTIVE_HIGHLIGHT_NAME)
   highlightsApi()?.delete(DRAFT_HIGHLIGHT_NAME)
 }
 
