@@ -252,7 +252,7 @@ code { font-family: var(--cb-mono); }
 .cb-element:hover { background: var(--cb-surface-2); }
 .cb-element code { color: var(--cb-accent); }
 .cb-element span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-element svg { flex-shrink: 0; align-self: center; width: 14px; height: 14px; color: var(--cb-accent); }
+.cb-area-chip svg { flex-shrink: 0; align-self: center; width: 14px; height: 14px; color: var(--cb-accent); }
 .cb-area-chip code { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cb-area-draft { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .cb-draft-scope { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
@@ -285,7 +285,7 @@ code { font-family: var(--cb-mono); }
 .cb-draw-box { position: fixed; border: 2px solid var(--cb-accent); border-radius: 2px; background: rgba(var(--cb-accent-rgb), .06); box-shadow: 0 0 0 100vmax rgba(16, 36, 74, .28); }
 .cb-draw-box span { position: absolute; top: calc(100% + 6px); right: -2px; padding: 1px 6px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cb-draw-covered { position: fixed; pointer-events: none; border: 1px dashed rgba(var(--cb-accent-rgb), .7); border-radius: 2px; }
-/* While the reader draws, the panel steps back: the page is what they look at. */
+/* While the reader draws, the panel steps back: the page is what they look at, and draw over. */
 .cb-panel[data-drawing] { opacity: .35; pointer-events: none; }
 .cb-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--cb-radius); background: var(--cb-text); color: #fff; font-size: 13px; pointer-events: none; }
 

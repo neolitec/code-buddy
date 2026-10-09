@@ -14,13 +14,7 @@ export interface ReviewElement {
 }
 
 /** An element an area covers or cuts through: enough to find it in the code. */
-export interface ReviewNode {
-  /** Selector from `body`, unique when it was recorded. */
-  selector: string
-  tag: string
-  /** Visible text, normalised and truncated. */
-  text: string
-}
+export type ReviewNode = Omit<ReviewElement, 'html'>
 
 /** A box, in CSS pixels. */
 export interface ReviewBox {
@@ -35,10 +29,12 @@ export interface ReviewArea extends ReviewBox {
   /** The viewport's size and scroll when it was drawn; `top` and `left` are from the page's corner. */
   viewport: { width: number; height: number; scrollX: number; scrollY: number }
   /**
-   * The smallest element holding the whole area, and the area in it as fractions
-   * of its box: found again on another viewport or after a layout change.
+   * The smallest element holding the whole area (its holder), the area's box
+   * from the holder's corner, and the holder's size then: the area is found
+   * again in it, its width scaled with the holder's, on another viewport or
+   * after a layout change.
    */
-  within?: ReviewNode & { box: ReviewBox }
+  within?: ReviewNode & { offset: ReviewBox; size: { width: number; height: number } }
   /** Elements wholly inside the area, the outermost ones only. */
   covers: ReviewNode[]
   /** Elements the area cuts through, such as the two blocks around a gap. */

@@ -103,68 +103,98 @@ async function readJson(req) {
   }
 }
 
-function sanitiseElement(element) {
-  if (!element || typeof element.selector !== 'string') return undefined
-  return {
-    selector: element.selector.slice(0, 500),
-    tag: String(element.tag ?? '').slice(0, 20),
-    text: normaliseQuote(String(element.text ?? '')).slice(0, 200),
-    html: normaliseQuote(String(element.html ?? '')).slice(0, 600),
-  }
-}
+/**
+ * @typedef {{ selector: string, tag: string, text: string }} AreaNode
+ * @typedef {{ top: number, left: number, width: number, height: number }} Box
+ * @typedef {Box & {
+ *   viewport: { width: number, height: number, scrollX: number, scrollY: number },
+ *   within?: AreaNode & { offset: Box, size: { width: number, height: number } },
+ *   covers: AreaNode[],
+ *   crosses: AreaNode[],
+ * }} Area
+ */
 
-/** An element a drawn area covers or crosses: no HTML, the area may hold many. */
-function sanitiseNode(node) {
+/**
+ * An element the reader pointed at, or that a drawn area covers or crosses.
+ * The tag is normalised too: a line break in it would split the manager's line.
+ * @param {any} node
+ * @param {number} textLength
+ * @returns {AreaNode | undefined}
+ */
+function sanitiseNode(node, textLength) {
   if (!node || typeof node.selector !== 'string') return undefined
   return {
     selector: node.selector.slice(0, 500),
-    tag: String(node.tag ?? '').slice(0, 20),
-    text: normaliseQuote(String(node.text ?? '')).slice(0, 80),
+    tag: normaliseQuote(String(node.tag ?? '')).slice(0, 20),
+    text: normaliseQuote(String(node.text ?? '')).slice(0, textLength),
   }
 }
 
-/** @param {unknown} value */
-const pixels = (value) => Math.min(Math.max(Math.round(Number(value) || 0), 0), 1_000_000)
+/** @param {any} element */
+function sanitiseElement(element) {
+  const node = sanitiseNode(element, 200)
+  return (
+    node && { ...node, html: normaliseQuote(String(element.html ?? '')).slice(0, 600) }
+  )
+}
 
-/** @param {unknown} value */
-const fraction = (value) => Math.min(Math.max(Number(value) || 0, 0), 1)
+const MAX_PIXELS = 1_000_000
+
+/**
+ * A length, or with `signed` a position: negative on a right-to-left page.
+ * @param {unknown} value
+ * @param {boolean} [signed]
+ */
+const pixels = (value, signed = false) =>
+  Math.min(Math.max(Math.round(Number(value) || 0), signed ? -MAX_PIXELS : 0), MAX_PIXELS)
+
+/**
+ * @param {any} box
+ * @returns {Box}
+ */
+const sanitiseBox = (box) => ({
+  top: pixels(box?.top, true),
+  left: pixels(box?.left, true),
+  width: pixels(box?.width),
+  height: pixels(box?.height),
+})
 
 /**
  * @param {unknown} list
  * @param {number} max
+ * @returns {AreaNode[]}
  */
 const sanitiseNodes = (list, max) =>
-  (Array.isArray(list) ? list : []).slice(0, max).map(sanitiseNode).filter(Boolean)
+  (Array.isArray(list) ? list : []).slice(0, max).flatMap((node) => {
+    const sanitised = sanitiseNode(node, 80)
+    return sanitised ? [sanitised] : []
+  })
 
-/** A rectangle the reader drew over the page; one with no surface is none. */
+/**
+ * A rectangle the reader drew over the page; one with no surface is none.
+ * @param {any} area
+ * @returns {Area | undefined}
+ */
 function sanitiseArea(area) {
   if (!area || typeof area !== 'object') return undefined
-  const width = pixels(area.width)
-  const height = pixels(area.height)
-  if (!width || !height) return undefined
-  const within = sanitiseNode(area.within)
-  const box = area.within?.box
+  const box = sanitiseBox(area)
+  if (!box.width || !box.height) return undefined
+  const within = sanitiseNode(area.within, 80)
+  const { offset, size } = area.within ?? {}
   return {
-    top: pixels(area.top),
-    left: pixels(area.left),
-    width,
-    height,
+    ...box,
     viewport: {
       width: pixels(area.viewport?.width),
       height: pixels(area.viewport?.height),
-      scrollX: pixels(area.viewport?.scrollX),
-      scrollY: pixels(area.viewport?.scrollY),
+      scrollX: pixels(area.viewport?.scrollX, true),
+      scrollY: pixels(area.viewport?.scrollY, true),
     },
-    ...(within && box && typeof box === 'object'
+    ...(within && offset && size
       ? {
           within: {
             ...within,
-            box: {
-              top: fraction(box.top),
-              left: fraction(box.left),
-              width: fraction(box.width),
-              height: fraction(box.height),
-            },
+            offset: sanitiseBox(offset),
+            size: { width: pixels(size.width), height: pixels(size.height) },
           },
         }
       : {}),
@@ -294,9 +324,11 @@ const nodeLabel = (node) => `<${node.tag}> ${node.text.slice(0, 40)}`.trim()
 /**
  * Where the area is and what it holds, for the manager to pass on: its size and
  * corner on the page, the element it lies in, and those it covers or crosses.
+ * @param {Area} area
  */
 function describeArea(area) {
   const within = area.within ? ` within=${quoted(nodeLabel(area.within))}` : ''
+  /** @param {AreaNode[]} list */
   const nodes = (list) => JSON.stringify(list.map(nodeLabel))
   return `area=${area.width}x${area.height}@${area.left},${area.top}${within} covers=${nodes(area.covers)} crosses=${nodes(area.crosses)}`
 }

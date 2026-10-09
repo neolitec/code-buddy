@@ -7,25 +7,20 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  coveredBy,
   elementFromAnchor,
-  elementsIn,
   holderOf,
   rangesFromAnchors,
   rectFromArea,
   startRect,
 } from './anchors'
-import type { ReviewArea, ReviewComment } from './domain'
+import type { ReviewArea, ReviewBox, ReviewComment } from './domain'
 import { RAINBOW_PERIOD } from './styles'
 import { Icon } from './ui'
 
 const WIDGET = '[data-code-buddy]'
 
-interface Box {
-  top: number
-  left: number
-  width: number
-  height: number
-}
+type Box = ReviewBox
 
 const boxOf = (element: Element): Box => {
   const { top, left, width, height } = element.getBoundingClientRect()
@@ -383,7 +378,7 @@ function Outline({ box, area }: { box: Box | undefined; area?: boolean }) {
   return (
     <div
       className={`cb-outline${area ? ' cb-outline--area' : ''}`}
-      data-testid={area ? 'cb-area' : 'cb-target'}
+      data-testid={area ? 'cb-area-target' : 'cb-target'}
       style={{
         top: box.top - 4,
         left: box.left - 4,
@@ -529,11 +524,6 @@ export function AreaDrawer({
   const [covered, setCovered] = useState<Box[]>([])
   const box = drag && boxBetween(drag.start, drag.end)
 
-  const update = (next: Drag | undefined) => {
-    latest.current = next
-    setDrag(next)
-  }
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCancel()
@@ -585,8 +575,7 @@ export function AreaDrawer({
   useEffect(() => {
     if (left === undefined || top === undefined || !width || !height) return undefined
     const frame = requestAnimationFrame(() => {
-      const { covers } = elementsIn(root, { left, top, width, height })
-      setCovered(covers.map(boxOf))
+      setCovered(coveredBy(root, { left, top, width, height }).map(boxOf))
     })
     return () => cancelAnimationFrame(frame)
   }, [root, left, top, width, height])
@@ -597,7 +586,8 @@ export function AreaDrawer({
     const pointer = { x: event.clientX, y: event.clientY }
     const point = { x: pointer.x + window.scrollX, y: pointer.y + window.scrollY }
     setCovered([])
-    update({ start: point, end: point, pointer })
+    latest.current = { start: point, end: point, pointer }
+    setDrag(latest.current)
   }
 
   return (

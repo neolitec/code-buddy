@@ -11,8 +11,8 @@ import {
   anchorFromArea,
   anchorFromElement,
   anchorFromSelection,
+  areaReady,
   elementFromAnchor,
-  holderOf,
   rangeFromAnchor,
   scrollToArea,
   startRect,
@@ -518,23 +518,33 @@ export default function App({ root }: { root: Element }) {
     document.addEventListener('mouseup', onUp)
   }
 
-  const spotlight = useCallback((element: Element, id?: string) => {
-    element.scrollIntoView(CENTER)
-    if (id) setActiveId(id)
+  // One flash at a time, an element's or an area's: the timer clears both.
+  const flashOn = useCallback((element?: Element, area?: ReviewArea) => {
     setFlash(element)
+    setFlashArea(area)
     clearTimeout(flashTimer.current)
-    flashTimer.current = setTimeout(() => setFlash(undefined), FLASH_MS)
+    flashTimer.current = setTimeout(() => {
+      setFlash(undefined)
+      setFlashArea(undefined)
+    }, FLASH_MS)
   }, [])
+
+  const spotlight = useCallback(
+    (element: Element, id?: string) => {
+      element.scrollIntoView(CENTER)
+      if (id) setActiveId(id)
+      flashOn(element)
+    },
+    [flashOn],
+  )
 
   const spotlightArea = useCallback(
     (area: ReviewArea, id?: string) => {
       scrollToArea(root, area)
       if (id) setActiveId(id)
-      setFlashArea(area)
-      clearTimeout(flashTimer.current)
-      flashTimer.current = setTimeout(() => setFlashArea(undefined), FLASH_MS)
+      flashOn(undefined, area)
     },
-    [root],
+    [root, flashOn],
   )
 
   useEffect(() => () => clearTimeout(flashTimer.current), [])
@@ -546,22 +556,17 @@ export default function App({ root }: { root: Element }) {
     const { anchor, id } = pendingCenter
     const attempt = () => {
       const { area } = anchor
-      // An area waits for the element it was drawn in; past the deadline, it shows where it was.
       const late = Date.now() > deadline
-      if (area && (!area.within || holderOf(root, area) || late)) {
-        spotlightArea(area, id)
-        writeSession(CENTER_KEY, undefined)
-        setPendingCenter(undefined)
+      // An area waits for the page to be laid out; past the deadline, it shows where it was.
+      const element = area ? undefined : elementFromAnchor(root, anchor)
+      if (!late && !element && !(area && areaReady(root, area))) {
+        frame = requestAnimationFrame(attempt)
         return
       }
-      const element = elementFromAnchor(root, anchor)
-      if (element || late) {
-        if (element) spotlight(element, id)
-        writeSession(CENTER_KEY, undefined)
-        setPendingCenter(undefined)
-        return
-      }
-      frame = requestAnimationFrame(attempt)
+      if (area) spotlightArea(area, id)
+      else if (element) spotlight(element, id)
+      writeSession(CENTER_KEY, undefined)
+      setPendingCenter(undefined)
     }
     attempt()
     return () => cancelAnimationFrame(frame)
@@ -585,8 +590,10 @@ export default function App({ root }: { root: Element }) {
 
   const cancelPick = useCallback(() => setPicking(false), [])
 
-  // Drawn from a page-level draft, the area joins what the reader had written.
-  const keptBody = view === 'page' && draft ? draft.body : ''
+  // Drawn from a page-level draft, or over another area, the area joins what the
+  // reader had written; a draft on a text or an element starts over, as when picking.
+  const keptBody =
+    view === 'page' && draft && !draft.quote && !draft.element ? draft.body : ''
   const drawArea = useCallback(
     (rect: ReviewBox) => startDraft(anchorFromArea(root, rect), keptBody),
     [root, startDraft, keptBody],
@@ -1097,6 +1104,9 @@ export default function App({ root }: { root: Element }) {
         </Button>
       )}
 
+      {/* Under the dock, whose Cancel must stay within reach, and under the panel,
+          which is inert while it draws. */}
+      {drawing && <AreaDrawer root={root} onDraw={drawArea} onCancel={cancelDraw} />}
       {!open && (
         <div className="cb-dock cb-live">
           <Button variant="secondary" icon="chat" onClick={() => startDraft(PAGE_LEVEL)}>
@@ -1127,7 +1137,8 @@ export default function App({ root }: { root: Element }) {
           style={{ width }}
           data-closing={!open || undefined}
           data-drawing={drawing || undefined}
-          inert={!open}
+          // While the reader draws, the message box must not take Escape or Enter.
+          inert={!open || drawing}
           data-testid="code-buddy-panel"
         >
           <div
@@ -1295,7 +1306,6 @@ export default function App({ root }: { root: Element }) {
           </footer>
         </section>
       )}
-      {drawing && <AreaDrawer root={root} onDraw={drawArea} onCancel={cancelDraw} />}
       <Toasts />
     </div>
   )

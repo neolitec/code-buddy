@@ -29,10 +29,10 @@
 ---
 
 You comment directly on your dev app in the browser: select text, point at an
-element, draw an area, or write about the page or the whole app. For each comment, Claude
-starts a background agent that makes the change, shows you its progress live
-under your comment, and answers in the same thread. Reply to follow up; cancel
-to stop it.
+element, draw an area, or write about the page or the whole app. For each
+comment, Claude starts a background agent that makes the change, shows you its
+progress live under your comment, and answers in the same thread. Reply to
+follow up; cancel to stop it.
 
 ## How it works
 
