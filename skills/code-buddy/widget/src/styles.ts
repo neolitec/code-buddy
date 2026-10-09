@@ -1,6 +1,9 @@
 import figtree from './assets/fonts/figtree-latin.woff2'
 import figtreeItalic from './assets/fonts/figtree-latin-italic.woff2'
 
+/** Width of one rainbow behind a commented text, before its colours start over. */
+export const RAINBOW_PERIOD = 720
+
 /** How long the panel takes to come in, or to widen and narrow. */
 export const PANEL_IN_MS = 200
 /** How long the panel takes to leave: shorter, it is on its way out. */
@@ -287,17 +290,19 @@ export const PAGE_CSS = `
 @font-face { font-family: 'Code Buddy Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(${figtree}) format('woff2'); }
 @font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
 @property --code-buddy-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-/* Behind a commented text, the rainbow of an element's frame, lighter and flowing: one
-   gradient for the whole viewport, so a quote's lines carry on from each other. */
+/* Behind a commented text, the rainbow of an element's frame, lighter and flowing.
+   Each line holds a slice of one rainbow laid over the viewport, so a quote's lines
+   carry on from each other; it slides by one period, and starts over seamlessly. */
 .code-buddy-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147482999; mix-blend-mode: multiply; }
 .code-buddy-layer[data-dark] { mix-blend-mode: screen; }
-.code-buddy-quote-mark {
-  position: fixed; border-radius: 3px; opacity: .35;
-  background: repeating-linear-gradient(100deg, #ff5f9e 0, #ffb340 120px, #ffe14d 240px, #3ddc97 360px, #3fa7ff 480px, #a66bff 600px, #ff5f9e 720px) fixed;
+.code-buddy-quote-mark { position: fixed; overflow: hidden; border-radius: 3px; opacity: .35; }
+.code-buddy-layer[data-dark] .code-buddy-quote-mark { opacity: .3; }
+.code-buddy-quote-mark > div {
+  position: absolute; width: calc(100vw + ${RAINBOW_PERIOD * 2}px); height: 100vh;
+  background: repeating-linear-gradient(90deg, #ff5f9e 0, #ffb340 ${RAINBOW_PERIOD / 6}px, #ffe14d ${RAINBOW_PERIOD / 3}px, #3ddc97 ${RAINBOW_PERIOD / 2}px, #3fa7ff ${(RAINBOW_PERIOD * 2) / 3}px, #a66bff ${(RAINBOW_PERIOD * 5) / 6}px, #ff5f9e ${RAINBOW_PERIOD}px);
   animation: code-buddy-flow 6s linear infinite;
 }
-.code-buddy-layer[data-dark] .code-buddy-quote-mark { opacity: .3; }
-@keyframes code-buddy-flow { to { background-position: 720px 0; } }
-@media (prefers-reduced-motion: reduce) { .code-buddy-quote-mark { animation: none; } }
+@keyframes code-buddy-flow { to { transform: translateX(${RAINBOW_PERIOD}px); } }
+@media (prefers-reduced-motion: reduce) { .code-buddy-quote-mark > div { animation: none; } }
 ::highlight(code-buddy-draft) { background-color: rgba(33, 110, 192, 0.25); }
 `

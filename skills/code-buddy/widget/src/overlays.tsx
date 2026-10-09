@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
 import type { ReviewComment } from './domain'
+import { RAINBOW_PERIOD } from './styles'
 import { Icon } from './ui'
 
 const WIDGET = '[data-code-buddy]'
@@ -255,7 +256,10 @@ export function QuoteBubbles({
                 width: line.width,
                 height: line.height,
               }}
-            />
+            >
+              {/* Laid from the viewport's corner, as every line's: they carry on from each other. */}
+              <div style={{ left: -line.left - RAINBOW_PERIOD, top: -line.top }} />
+            </div>
           )),
         ),
         layer,

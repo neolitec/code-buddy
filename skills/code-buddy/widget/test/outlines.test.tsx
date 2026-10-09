@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { expect, onTestFinished, test, vi } from 'vitest'
+import { RAINBOW_PERIOD } from '../src/styles'
 import { comment, fakeServer, openPanel } from './server'
 import { renderWidget, stubHighlights } from './widget'
 
@@ -85,6 +86,11 @@ test('a text is in progress until its thread is resolved', async () => {
 
   await waitFor(() => expect(lines()).toHaveLength(1))
   expect([lines()[0]?.style.left, lines()[0]?.style.width]).toEqual(['40px', '200px'])
+  // Its rainbow starts at the viewport's corner, as every line's does: they carry on.
+  const rainbow = lines()[0]?.firstElementChild
+  expect(
+    rainbow instanceof HTMLElement && [rainbow.style.left, rainbow.style.top],
+  ).toEqual([`${-40 - RAINBOW_PERIOD}px`, '-100px'])
   // Drawn by the widget: the page's highlights only hold the draft.
   expect([...highlights.keys()]).toEqual(['code-buddy-draft'])
 })
