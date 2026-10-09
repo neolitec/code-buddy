@@ -393,7 +393,7 @@ export default function App({ root }: { root: Element }) {
     const drafted = draftQuote
       ? { section: '', quote: draftQuote, occurrence: draftOccurrence }
       : undefined
-    const paint = () => paintHighlights(root, comments, drafted)
+    const paint = () => paintHighlights(root, drafted)
     paint()
     const observer = new MutationObserver(paint)
     observer.observe(root, { childList: true, subtree: true, characterData: true })
@@ -401,7 +401,7 @@ export default function App({ root }: { root: Element }) {
       observer.disconnect()
       clearHighlights()
     }
-  }, [root, comments, draftQuote, draftOccurrence])
+  }, [root, draftQuote, draftOccurrence])
 
   useEffect(() => {
     const onSelectionChange = () => {
@@ -976,7 +976,7 @@ export default function App({ root }: { root: Element }) {
 
   return (
     <div className="cb">
-      <ElementMarks root={root} comments={comments} />
+      <ElementMarks root={root} comments={comments} onOpen={openFromPage} />
       <QuoteBubbles root={root} comments={comments} onOpen={openFromPage} />
       {outlined && <TargetOutline element={outlined} />}
       {picking && (

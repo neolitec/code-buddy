@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
 import type { ReviewComment } from './domain'
 import { Icon } from './ui'
@@ -72,49 +73,49 @@ function useTracked<Found, Measured>(
 }
 
 interface Mark extends Box {
-  id: string
-  index: number
+  comment: ReviewComment
 }
 
 function findElements(root: Element, comments: ReviewComment[]) {
-  return comments.flatMap((comment, index) => {
+  return comments.flatMap((comment) => {
     if (comment.status !== 'open') return []
     const element = elementFromAnchor(root, comment)
-    return element ? [{ id: comment.id, index: index + 1, element }] : []
+    return element ? [{ comment, element }] : []
   })
 }
 
 function measureElements(found: ReturnType<typeof findElements>): Mark[] {
-  return found.map(({ id, index, element }) => ({ id, index, ...boxOf(element) }))
+  return found.map(({ comment, element }) => ({ comment, ...boxOf(element) }))
 }
 
 /**
- * Numbered frames around the elements that open comments point at, until
- * Claude resolves their thread.
+ * Frames around the elements that open comments point at, until Claude
+ * resolves their thread; a bubble on each opens the comment's thread.
  */
 export function ElementMarks({
   root,
   comments,
+  onOpen,
 }: {
   root: Element
   comments: ReviewComment[]
+  onOpen: (comment: ReviewComment) => void
 }) {
   const marks = useTracked(root, comments, findElements, measureElements)
 
   return (
     <>
-      {marks.map((mark) => (
-        <div
-          key={mark.id}
-          className="cb-mark"
-          style={{
-            top: mark.top,
-            left: mark.left,
-            width: mark.width,
-            height: mark.height,
-          }}
-        >
-          <span className="cb-pin">{mark.index}</span>
+      {marks.map(({ comment, top, left, width, height }) => (
+        <div key={comment.id} className="cb-mark" style={{ top, left, width, height }}>
+          <button
+            type="button"
+            className="cb-quote-pin cb-mark-pin cb-live"
+            aria-label={`Open the comment on <${comment.element?.tag ?? 'element'}>`}
+            title={comment.body}
+            onClick={() => onOpen(comment)}
+          >
+            <Icon name="chat" />
+          </button>
         </div>
       ))}
     </>
@@ -125,6 +126,30 @@ interface QuotePin {
   comment: ReviewComment
   top: number
   left: number
+  /** One box per line of the quote, behind its text. */
+  lines: Box[]
+}
+
+/** The boxes of the text `range` covers, line by line: not those of the elements it spans. */
+function lineBoxes(range: Range): Box[] {
+  const ancestor = range.commonAncestorContainer
+  const walker = document.createTreeWalker(ancestor, NodeFilter.SHOW_TEXT)
+  const texts: Text[] = []
+  if (ancestor instanceof Text) texts.push(ancestor)
+  while (walker.nextNode()) {
+    if (walker.currentNode instanceof Text && range.intersectsNode(walker.currentNode)) {
+      texts.push(walker.currentNode)
+    }
+  }
+  return texts.flatMap((text) => {
+    const part = document.createRange()
+    part.selectNodeContents(text)
+    if (text === range.startContainer) part.setStart(text, range.startOffset)
+    if (text === range.endContainer) part.setEnd(text, range.endOffset)
+    return Array.from(part.getClientRects())
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .map(({ top, left, width, height }) => ({ top, left, width, height }))
+  })
 }
 
 /** The ranges of the open comments on a text, read from the page's text once. */
@@ -139,6 +164,52 @@ function findQuotes(root: Element, comments: ReviewComment[]) {
   })
 }
 
+/** Under this luminance, the page is dark: a rainbow lightens it rather than tints it. */
+const DARK = 0.4
+
+/** The page's background, from the first of `body` and `html` that has one. */
+function pageIsDark(): boolean {
+  for (const element of [document.body, document.documentElement]) {
+    const channels = getComputedStyle(element)
+      .backgroundColor.match(/[\d.]+/g)
+      ?.map(Number)
+    const [r = 0, g = 0, b = 0, alpha = 1] = channels ?? []
+    if (!channels || alpha === 0) continue
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < DARK
+  }
+  return false
+}
+
+/**
+ * A layer in the page itself, over its content: the shadow root's stacking
+ * context would blend the rainbow with the widget alone, and so tint the text
+ * above it. Blended with the page, it colours the background and leaves dark
+ * text dark (light text light, on a dark page).
+ */
+function usePageLayer() {
+  const [layer] = useState(() => {
+    const element = document.createElement('div')
+    element.setAttribute('data-code-buddy', '')
+    element.className = 'code-buddy-layer'
+    return element
+  })
+  useEffect(() => {
+    // Out of `body`, the root the marks watch: its changes would measure them again, and again.
+    document.documentElement.append(layer)
+    const theme = () => layer.toggleAttribute('data-dark', pageIsDark())
+    theme()
+    const observer = new MutationObserver(theme)
+    for (const target of [document.documentElement, document.body]) {
+      observer.observe(target, { attributes: true })
+    }
+    return () => {
+      observer.disconnect()
+      layer.remove()
+    }
+  }, [layer])
+  return layer
+}
+
 /** Width of a bubble and its gap: the next one on the same spot sits beside it. */
 const PIN_STEP = 26
 
@@ -149,12 +220,15 @@ function measureQuotes(found: ReturnType<typeof findQuotes>): QuotePin[] {
     const { top, left, height } = startRect(range)
     if (!height) continue
     const stacked = pins.filter((pin) => pin.top === top && pin.left === left).length
-    pins.push({ comment, top, left: left + stacked * PIN_STEP })
+    pins.push({ comment, top, left: left + stacked * PIN_STEP, lines: lineBoxes(range) })
   }
   return pins
 }
 
-/** A bubble above the start of each commented text, which opens the comment's thread. */
+/**
+ * A rainbow behind each commented text, until Claude resolves its thread, and a
+ * bubble above its start, which opens the comment's thread.
+ */
 export function QuoteBubbles({
   root,
   comments,
@@ -165,9 +239,27 @@ export function QuoteBubbles({
   onOpen: (comment: ReviewComment) => void
 }) {
   const pins = useTracked(root, comments, findQuotes, measureQuotes)
+  const layer = usePageLayer()
 
   return (
     <>
+      {createPortal(
+        pins.flatMap(({ comment, lines }) =>
+          lines.map((line) => (
+            <div
+              key={`${comment.id}:${line.top}:${line.left}`}
+              className="code-buddy-quote-mark"
+              style={{
+                top: line.top,
+                left: line.left,
+                width: line.width,
+                height: line.height,
+              }}
+            />
+          )),
+        ),
+        layer,
+      )}
       {pins.map(({ comment, top, left }) => (
         <button
           key={comment.id}

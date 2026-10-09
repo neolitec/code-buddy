@@ -17,13 +17,22 @@ function layout() {
     .spyOn(Element.prototype, 'getBoundingClientRect')
     .mockReturnValue(box)
   const range = vi.spyOn(Range.prototype, 'getBoundingClientRect').mockReturnValue(box)
+  const lines = vi.spyOn(Range.prototype, 'getClientRects').mockReturnValue(
+    // A list of one line: all the widget reads of a DOMRectList.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    [box] as unknown as DOMRectList,
+  )
   onTestFinished(() => {
     element.mockRestore()
     range.mockRestore()
+    lines.mockRestore()
   })
 }
 
 const marks = () => Array.from(document.querySelectorAll('.cb-mark'))
+/** The rainbow behind each line of a text: in a layer of the page, out of `body`. */
+const lines = () =>
+  Array.from(document.querySelectorAll<HTMLElement>('.code-buddy-layer > *'))
 
 test('an element is in progress until its thread is resolved', async () => {
   layout()
@@ -35,7 +44,19 @@ test('an element is in progress until its thread is resolved', async () => {
   renderWidget()
 
   await waitFor(() => expect(marks()).toHaveLength(1))
-  expect(marks()[0]?.textContent).toBe('1')
+})
+
+test("a bubble on an element opens its comment's thread", async () => {
+  layout()
+  document.body.replaceChildren()
+  fakeServer([comment({ element: TITLE })])
+  renderWidget()
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Open the comment on <h1>' }))
+
+  expect((await screen.findByTestId('cb-working')).textContent).toBe(
+    'Waiting for Claude…',
+  )
 })
 
 test('an element keeps its in-progress look once its thread is opened', async () => {
@@ -52,18 +73,20 @@ test('an element keeps its in-progress look once its thread is opened', async ()
   expect(marks().map((mark) => mark.className)).toEqual(['cb-mark'])
 })
 
-test('a text keeps its in-progress highlight once its thread is opened', async () => {
+test('a text is in progress until its thread is resolved', async () => {
   const highlights = stubHighlights()
   layout()
   document.body.replaceChildren()
-  fakeServer([comment({ quote: 'Playground' })])
+  fakeServer([
+    comment({ id: 'c1', quote: 'Playground' }),
+    comment({ id: 'c2', quote: 'Play', status: 'resolved' }),
+  ])
   renderWidget()
 
-  fireEvent.click(await screen.findByRole('button', { name: /Open the comment/ }))
-
-  await screen.findByTestId('cb-working')
-  await waitFor(() => expect(highlights.get('code-buddy')?.size).toBe(1))
-  expect(highlights.has('code-buddy-active')).toBe(false)
+  await waitFor(() => expect(lines()).toHaveLength(1))
+  expect([lines()[0]?.style.left, lines()[0]?.style.width]).toEqual(['40px', '200px'])
+  // Drawn by the widget: the page's highlights only hold the draft.
+  expect([...highlights.keys()]).toEqual(['code-buddy-draft'])
 })
 
 /** The reader points at the page's title and starts a comment on it. */

@@ -262,10 +262,11 @@ code { font-family: var(--cb-mono); }
 }
 @keyframes cb-unicorn { to { --code-buddy-angle: 360deg; } }
 @media (prefers-reduced-motion: reduce) { .cb-mark::before { animation: none; } }
-.cb-pin { position: absolute; top: -12px; right: -12px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--cb-unicorn); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
-.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -32px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
+.cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin: -20px 0 0 -4px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
 .cb-quote-pin svg { width: 12px; height: 12px; }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
+/* On an element: its top right corner, the tail towards it. */
+.cb-mark-pin { position: absolute; top: -18px; right: -18px; margin: 0; }
 .cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
 .cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
@@ -286,6 +287,17 @@ export const PAGE_CSS = `
 @font-face { font-family: 'Code Buddy Figtree'; font-style: normal; font-weight: 400 700; font-display: swap; src: url(${figtree}) format('woff2'); }
 @font-face { font-family: 'Code Buddy Figtree'; font-style: italic; font-weight: 400; font-display: swap; src: url(${figtreeItalic}) format('woff2'); }
 @property --code-buddy-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
-::highlight(code-buddy) { background-color: rgba(166, 107, 255, 0.25); }
+/* Behind a commented text, the rainbow of an element's frame, lighter and flowing: one
+   gradient for the whole viewport, so a quote's lines carry on from each other. */
+.code-buddy-layer { position: fixed; inset: 0; pointer-events: none; z-index: 2147482999; mix-blend-mode: multiply; }
+.code-buddy-layer[data-dark] { mix-blend-mode: screen; }
+.code-buddy-quote-mark {
+  position: fixed; border-radius: 3px; opacity: .35;
+  background: repeating-linear-gradient(100deg, #ff5f9e 0, #ffb340 120px, #ffe14d 240px, #3ddc97 360px, #3fa7ff 480px, #a66bff 600px, #ff5f9e 720px) fixed;
+  animation: code-buddy-flow 6s linear infinite;
+}
+.code-buddy-layer[data-dark] .code-buddy-quote-mark { opacity: .3; }
+@keyframes code-buddy-flow { to { background-position: 720px 0; } }
+@media (prefers-reduced-motion: reduce) { .code-buddy-quote-mark { animation: none; } }
 ::highlight(code-buddy-draft) { background-color: rgba(33, 110, 192, 0.25); }
 `

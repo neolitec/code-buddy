@@ -97,11 +97,11 @@ from the current directory, else from the repository root.
 - **Comment** opens a new comment for the page, or the whole app.
 - **Select text**, then _Comment_, to anchor a comment to that text. A bubble
   then marks the text on the page; clicking it opens the comment's thread.
-- **Point at element** to anchor it to an element; hovering the element chip
-  later outlines it on the page, clicking it scrolls to it (navigating first
-  if it lives on another page).
-- On the page, blue is what you are pointing at or commenting on; a turning
-  rainbow (a violet highlight on a text) marks a comment Claude has yet to
+- **Point at element** to anchor it to an element. A bubble then marks the
+  element too; hovering the element chip later outlines it on the page,
+  clicking it scrolls to it (navigating first if it lives on another page).
+- On the page, blue is what you are pointing at or commenting on; a rainbow,
+  around an element or behind a text, marks a comment Claude has yet to
   resolve; once its thread is resolved, the mark goes away.
 - **All comments** lists every discussion, newest first, filtered by status.
 - While Claude works: what the agent is doing now ("Reading `App.tsx`…",
