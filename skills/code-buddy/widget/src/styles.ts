@@ -268,8 +268,8 @@ code { font-family: var(--cb-mono); }
 .cb-quote-pin { position: fixed; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-top: -22px; padding: 0; border: 2px solid #fff; border-radius: 11px 11px 11px 3px; background: var(--cb-unicorn); color: #fff; cursor: pointer; box-shadow: var(--cb-shadow); transition: transform .15s; }
 .cb-quote-pin svg { width: 12px; height: 12px; }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
-/* On an element: its top right corner, the tail towards it. */
-.cb-mark-pin { position: absolute; top: -18px; right: -18px; margin: 0; }
+/* On an element, as on a text: on its top left corner, the tail towards it. */
+.cb-mark-pin { position: absolute; top: 0; left: 0; }
 .cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
 .cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
