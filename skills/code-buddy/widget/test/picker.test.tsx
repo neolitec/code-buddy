@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react'
 import { expect, onTestFinished, test, vi } from 'vitest'
-import { ElementPicker } from '../src/overlays'
+import { ElementPicker, HOVER_DWELL_MS } from '../src/overlays'
 
 /** A page of a table's cells, laid side by side: happy-dom lays nothing out. */
 function page() {
@@ -19,17 +19,20 @@ function page() {
     .mockImplementation(function (this: Element) {
       return boxes.get(this) ?? DOMRect.fromRect()
     })
+  vi.useFakeTimers()
   let under: Element | null = null
   const point = vi.spyOn(document, 'elementFromPoint').mockImplementation(() => under)
   onTestFinished(() => {
+    vi.useRealTimers()
     box.mockRestore()
     point.mockRestore()
     root.remove()
   })
-  /** The pointer moves over `element`, or over nothing to pick. */
-  const hover = (element: Element | undefined) => {
+  /** The pointer moves over `element`, or over nothing to pick, and stays there `ms`. */
+  const hover = (element: Element | undefined, ms = HOVER_DWELL_MS) => {
     under = element ?? null
     fireEvent.mouseMove(document)
+    vi.advanceTimersByTime(ms)
   }
   return { root, first, second, text, boxes, hover }
 }
@@ -63,6 +66,22 @@ test("the outline takes the element's rounded corners", () => {
 
   act(() => hover(first))
   expect(outline()?.style.borderRadius).toBe('8px 4px')
+})
+
+test('the outline moves only once the pointer stays on an element', () => {
+  const { root, first, second, text, hover } = page()
+  render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
+  act(() => hover(first))
+
+  // Passing over a cell on the way to the text: the outline waits.
+  act(() => hover(second, HOVER_DWELL_MS - 1))
+  act(() => hover(text, HOVER_DWELL_MS - 1))
+  expect(outline()?.style.transform).toBe('translate(10px, 20px)')
+
+  act(() => {
+    vi.advanceTimersByTime(1)
+  })
+  expect(outline()?.style.transform).toBe('translate(10px, 70px)')
 })
 
 test('across a gap between two elements, the outline fades out and glides on', () => {

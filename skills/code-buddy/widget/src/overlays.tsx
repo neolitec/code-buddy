@@ -326,9 +326,12 @@ export function TargetOutline({ element }: { element: Element }) {
   )
 }
 
+/** How long the pointer stays on an element before the outline moves to it. */
+export const HOVER_DWELL_MS = 50
+
 /**
- * Dashed outline follows the pointer, gliding from one element to the next; a
- * click picks the element, Escape cancels.
+ * Dashed outline follows the pointer, gliding from one element to the next
+ * once the pointer stays on it; a click picks the element, Escape cancels.
  */
 export function ElementPicker({
   root,
@@ -348,6 +351,9 @@ export function ElementPicker({
   const [, setTick] = useState(0)
 
   useEffect(() => {
+    // The element the pointer is on, until it has stayed there long enough.
+    let next: Element | undefined
+    let dwell = 0
     const target = (event: MouseEvent) => {
       const element = document.elementFromPoint(event.clientX, event.clientY)
       return element &&
@@ -359,9 +365,14 @@ export function ElementPicker({
     }
     const onMove = (event: MouseEvent) => {
       const element = target(event)
-      if (element) setHovered(element)
-      setOver(!!element)
-      setScrolled(false)
+      if (element === next) return
+      next = element
+      clearTimeout(dwell)
+      dwell = window.setTimeout(() => {
+        if (element) setHovered(element)
+        setOver(!!element)
+        setScrolled(false)
+      }, HOVER_DWELL_MS)
     }
     const onClick = (event: MouseEvent) => {
       const element = target(event)
@@ -383,6 +394,7 @@ export function ElementPicker({
     document.addEventListener('scroll', onScroll, true)
     document.documentElement.style.cursor = 'crosshair'
     return () => {
+      clearTimeout(dwell)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('click', onClick, true)
       document.removeEventListener('keydown', onKey)
