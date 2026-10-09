@@ -95,11 +95,14 @@ from the current directory, else from the repository root.
 ## In the widget
 
 - **Comment** opens a new comment for the page, or the whole app.
-- **Select text**, then *Comment*, to anchor a comment to that text. A bubble
+- **Select text**, then _Comment_, to anchor a comment to that text. A bubble
   then marks the text on the page; clicking it opens the comment's thread.
-- **Point at element** to anchor it to an element; hovering the element chip
-  later outlines it on the page, clicking it scrolls to it (navigating first
-  if it lives on another page).
+- **Point at element** to anchor it to an element. A bubble then marks the
+  element too; hovering the element chip later outlines it on the page,
+  clicking it scrolls to it (navigating first if it lives on another page).
+- On the page, blue is what you are pointing at or commenting on; a rainbow,
+  around an element or behind a text, marks a comment Claude has yet to
+  resolve; once its thread is resolved, the mark goes away.
 - **All comments** lists every discussion, newest first, filtered by status.
 - While Claude works: what the agent is doing now ("Reading `App.tsx`…",
   "Thinking…"), its latest steps (files read and edited, commands, searches,
@@ -147,19 +150,19 @@ Each line reads `<time> <agent> <comment> <what happened>`; the agent is
 … a53927e6… e329bcbb… run ended (answered or asked): unbound, released 1 lock(s), progress dropped
 ```
 
-| Line | What it means |
-|---|---|
-| `hooks loaded in a new session` | The hooks run in that session. **No line at all** after starting a session: they did not load (Code Buddy needs Claude Code 2.1.287 or later). |
-| `bound to comment <id> in <project>` | The agent claimed its comment: from now on its files are locked and its steps shown. |
-| `claim.mjs printed no project, so the agent is not bound` | The claim failed (the comment was stopped, resolved or deleted); the reason follows. |
-| `cannot read <project>/.code-buddy.json …: binding dropped` | The agent's project has no readable config: it works on without locks or progress. |
-| `locked <file>` | The agent holds that file, named from the repository root, until its run ends. |
-| `waiting for <file>, held by comment <id>` | Another comment's agent is changing it; the agent waits up to 6 seconds. |
-| `refused <file>: still held by comment <id>` | The wait ran out: the agent releases its locks, re-reads and retries. |
-| `no lock for <file>: outside <repository>` | Files outside the git repository take no lock. |
-| `refused a Bash write: <command>` | The agent tried to write files from Bash, where they cannot be locked; it is told to use Edit or Write. |
-| `recorded <step>` | A step shown under the comment. `recorded nothing: the comment is no longer active` when the reader stopped it. |
-| `run ended …`, `turn ended …` | The agent answered, asked, or stopped: its locks are released. |
+| Line                                                        | What it means                                                                                                                                  |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hooks loaded in a new session`                             | The hooks run in that session. **No line at all** after starting a session: they did not load (Code Buddy needs Claude Code 2.1.287 or later). |
+| `bound to comment <id> in <project>`                        | The agent claimed its comment: from now on its files are locked and its steps shown.                                                           |
+| `claim.mjs printed no project, so the agent is not bound`   | The claim failed (the comment was stopped, resolved or deleted); the reason follows.                                                           |
+| `cannot read <project>/.code-buddy.json …: binding dropped` | The agent's project has no readable config: it works on without locks or progress.                                                             |
+| `locked <file>`                                             | The agent holds that file, named from the repository root, until its run ends.                                                                 |
+| `waiting for <file>, held by comment <id>`                  | Another comment's agent is changing it; the agent waits up to 6 seconds.                                                                       |
+| `refused <file>: still held by comment <id>`                | The wait ran out: the agent releases its locks, re-reads and retries.                                                                          |
+| `no lock for <file>: outside <repository>`                  | Files outside the git repository take no lock.                                                                                                 |
+| `refused a Bash write: <command>`                           | The agent tried to write files from Bash, where they cannot be locked; it is told to use Edit or Write.                                        |
+| `recorded <step>`                                           | A step shown under the comment. `recorded nothing: the comment is no longer active` when the reader stopped it.                                |
+| `run ended …`, `turn ended …`                               | The agent answered, asked, or stopped: its locks are released.                                                                                 |
 
 ## Security
 
@@ -193,12 +196,12 @@ CONTRIBUTING.md, which also covers trying them in an app of your own.
 
 What to do after a change:
 
-| You changed | To see it |
-|---|---|
-| `SKILL.md`, `hooks/*` | `/reload-plugins` in the session, or a new session |
-| `scripts/*.mjs` except the server | Nothing: each call runs the script again |
+| You changed                           | To see it                                              |
+| ------------------------------------- | ------------------------------------------------------ |
+| `SKILL.md`, `hooks/*`                 | `/reload-plugins` in the session, or a new session     |
+| `scripts/*.mjs` except the server     | Nothing: each call runs the script again               |
 | `scripts/server.mjs`, `scripts/lib/*` | Restart the server: run `/code-buddy:code-buddy` again |
-| `widget/src/*` | Rebuild the widget, then reload the app page |
+| `widget/src/*`                        | Rebuild the widget, then reload the app page           |
 
 The server reads `dist/widget.js` on every page load, so a rebuild and a page
 reload are enough for the widget. From the repository root:
@@ -216,13 +219,13 @@ for the rest of the rules.
 
 Paths below are relative to `skills/code-buddy/`.
 
-| Path | What |
-|---|---|
-| `SKILL.md` | The skill: watch, init, update, uninstall; agent prompts |
-| `scripts/server.mjs` | Local server: widget, API, events for the managing session |
-| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs` | Used by the agents |
-| `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update` |
-| `widget/src` | The widget (React, TypeScript) |
+| Path                                                   | What                                                       |
+| ------------------------------------------------------ | ---------------------------------------------------------- |
+| `SKILL.md`                                             | The skill: watch, init, update, uninstall; agent prompts   |
+| `scripts/server.mjs`                                   | Local server: widget, API, events for the managing session |
+| `scripts/claim.mjs`, `resolve.mjs`, `ask.mjs`          | Used by the agents                                         |
+| `scripts/detect.mjs`, `verify-prod.mjs`, `migrate.mjs` | Used by `init` / `update`                                  |
+| `widget/src`                                           | The widget (React, TypeScript)                             |
 
 At the repository root, `hooks/register.ts` is the plugin's hooks module (a
 Claude Code mod, declared in `hooks/hooks.json`): file locks and live progress.

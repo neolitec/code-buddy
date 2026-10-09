@@ -1,22 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { expect, onTestFinished, test, vi } from 'vitest'
 import { comment, fakeServer } from './server'
-import { renderWidget } from './widget'
-
-/** happy-dom has no CSS Custom Highlight API: a registry to read back. */
-function stubHighlights() {
-  const highlights = new Map<string, Set<Range>>()
-  vi.stubGlobal('CSS', { escape: CSS.escape, highlights })
-  vi.stubGlobal(
-    'Highlight',
-    class extends Set<Range> {
-      constructor(...ranges: Range[]) {
-        super(ranges)
-      }
-    },
-  )
-  return highlights
-}
+import { renderWidget, stubHighlights } from './widget'
 
 /**
  * The widget over a page with two blocks, the reader selecting from the first

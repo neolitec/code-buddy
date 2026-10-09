@@ -20,8 +20,8 @@ export function comment(fields: Partial<ReviewComment> = {}): ReviewComment {
 }
 
 /**
- * Stands in for the Code Buddy server: serves `comments` and records each
- * PATCH. `reachable: false` fails the page's list, as when no session runs.
+ * Stands in for the Code Buddy server: serves `comments`, adds the ones POSTed
+ * and records each PATCH. `reachable: false` fails the page's list, as when no session runs.
  */
 export function fakeServer(comments: ReviewComment[], { reachable = true } = {}) {
   const patches: { id: string; patch: ReviewCommentPatch }[] = []
@@ -36,6 +36,15 @@ export function fakeServer(comments: ReviewComment[], { reachable = true } = {})
       patches.push({ id, patch })
       return Response.json(comments.find((entry) => entry.id === id))
     }
+    if (init?.method === 'POST') {
+      const body = typeof init.body === 'string' ? init.body : ''
+      // The widget sends a new comment: the test reads it back as one.
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      const fields = JSON.parse(body) as Partial<ReviewComment>
+      const created = comment({ id: `c${comments.length + 1}`, ...fields })
+      comments.push(created)
+      return Response.json(created)
+    }
     if (!reachable && url.searchParams.has('route')) {
       return new Response(null, { status: 502 })
     }
@@ -47,8 +56,13 @@ export function fakeServer(comments: ReviewComment[], { reachable = true } = {})
 
 /** Opens the panel on a thread, as the reader left it. */
 export function openThread(id: string, view: 'page' | 'all' = 'page') {
+  openPanel(view, id)
+}
+
+/** Opens the panel on the list of `view`, or on a thread. */
+export function openPanel(view: 'page' | 'all' = 'page', threadId?: string) {
   sessionStorage.setItem(
     'code-buddy:ui',
-    JSON.stringify({ open: true, docked: false, width: 380, view, threadId: id }),
+    JSON.stringify({ open: true, docked: false, width: 380, view, threadId }),
   )
 }
