@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // launch.mjs prepare [keep] | open
-// prepare: builds the widget, a dev build with the debug panel, when it is missing,
-//   a release build, or older than its sources, then
-//   refreshes the working copy .playground/ from playground/ (kept as it is with `keep`).
+// prepare: builds the widget with its debug panel (npm run build:dev) when the
+//   bundle is missing, a release build or older than its sources, then refreshes
+//   the working copy .playground/ from playground/ (kept as it is with `keep`).
 // open: waits for the app and its Code Buddy server, then opens the app in the browser.
 import { spawn, spawnSync } from 'node:child_process'
 import { cpSync, existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
@@ -52,7 +52,8 @@ async function prepare(keep) {
   const bundle = path.join(WIDGET, 'dist/widget.js')
   if (
     !existsSync(bundle) ||
-    // A release build, from npm run build: no debug panel.
+    // A release build, from npm run build: no debug panel. build.mjs writes this
+    // banner on a dev build; test/bundle.test.mjs holds it to it.
     !readFileSync(bundle, 'utf8').startsWith('/* code-buddy widget (dev build') ||
     statSync(bundle).mtimeMs < newest(path.join(WIDGET, 'src'))
   ) {

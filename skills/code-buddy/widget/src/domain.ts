@@ -137,6 +137,19 @@ export function isAsking(comment: Lifecycle) {
   return comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
 }
 
+/** An open comment whose run the reader cancelled, until they send it again. */
+export const paused = (comment: Lifecycle) =>
+  comment.status === 'open' && !!comment.cancelledAt
+
+/** Where a comment stands, as its chip in the panel shows it. */
+export function statusOf(
+  comment: Lifecycle & Pick<ReviewComment, 'claimedAt'>,
+): 'open' | 'claimed' | 'asking' | 'resolved' {
+  if (comment.status === 'resolved') return 'resolved'
+  if (isAsking(comment)) return 'asking'
+  return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
+}
+
 export function normaliseQuote(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }

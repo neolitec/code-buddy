@@ -30,6 +30,8 @@ import {
   type ReviewProgress,
   isActive,
   isAsking,
+  paused,
+  statusOf,
   threadOf,
 } from './domain'
 import { DebugPanel, DebugToggle } from './debug'
@@ -75,12 +77,12 @@ const CENTER_KEY = 'code-buddy:center'
 type View = 'page' | 'all'
 type StatusFilter = 'all' | 'open' | 'resolved'
 
-const STATUS_CHIPS = {
+const STATUS_CHIPS: Record<ReturnType<typeof statusOf>, string> = {
   open: 'Open',
   claimed: 'In progress',
   asking: 'Needs you',
   resolved: 'Resolved',
-} as const
+}
 
 const STEP_ICONS: Record<string, IconName> = {
   read: 'file-text',
@@ -320,15 +322,6 @@ function scopeLabel(comment: { route: string; url?: string }): string {
 function latestText(comment: ReviewComment): string {
   const last = comment.messages?.at(-1)
   return last?.author === 'reader' ? last.body : comment.body
-}
-
-const paused = (comment: ReviewComment) =>
-  comment.status === 'open' && !!comment.cancelledAt
-
-function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
-  if (comment.status === 'resolved') return 'resolved'
-  if (isAsking(comment)) return 'asking'
-  return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
 export default function App({ root }: { root: Element }) {
@@ -1168,7 +1161,7 @@ export default function App({ root }: { root: Element }) {
       )}
       {CODE_BUDDY_DEBUG && (
         <DebugPanel
-          held={[...comments, ...all.comments, ...(created ? [created] : [])]}
+          held={[...comments, ...(created ? [created] : [])]}
           {...(openedId ? { current: openedId } : {})}
         />
       )}

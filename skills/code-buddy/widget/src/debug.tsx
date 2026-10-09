@@ -7,8 +7,8 @@ import {
   type ReviewComment,
   type ReviewMessage,
   type ReviewProgress,
-  isActive,
-  isAsking,
+  paused,
+  statusOf,
   threadOf,
 } from './domain'
 import { IconButton } from './ui'
@@ -42,23 +42,22 @@ const DEBUG_CSS = `
 let shown = false
 const listeners = new Set<() => void>()
 
-export function toggleDebug() {
-  shown = !shown
+/** Shows or hides the panel; flips it without `value`. */
+export function toggleDebug(value = !shown) {
+  shown = value
   listeners.forEach((listener) => listener())
 }
 
-function useShown() {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    () => shown,
-  )
+const subscribe = (listener: () => void) => {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
+
+const useShown = () => useSyncExternalStore(subscribe, () => shown)
 
 /** Alt+Shift+D: by its key code, as macOS turns Alt+Shift+D into another character. */
 const isShortcut = (event: KeyboardEvent) =>
+  !event.repeat &&
   event.altKey &&
   event.shiftKey &&
   !event.ctrlKey &&
@@ -72,7 +71,7 @@ export function DebugToggle() {
       icon="wrench"
       label="Debug panel (Alt+Shift+D)"
       aria-pressed={useShown()}
-      onClick={toggleDebug}
+      onClick={() => toggleDebug()}
     />
   )
 }
@@ -84,7 +83,10 @@ type TimelineEvent =
 
 const time = (at: string | undefined) => (at ? Date.parse(at) : NaN)
 
-/** The whole conversation in order: status changes, messages and progress steps. */
+/**
+ * The whole conversation in order: status changes, messages and progress steps.
+ * A comment keeps only the latest time of each status: one asked twice shows one `asking`.
+ */
 export function timelineOf(comment: ReviewComment): TimelineEvent[] {
   const events: TimelineEvent[] = []
   const status = (at: string | undefined, label: string, detail?: string) => {
@@ -109,8 +111,10 @@ export function timelineOf(comment: ReviewComment): TimelineEvent[] {
   status(comment.resolvedAt, 'resolved')
   for (const step of comment.progress ?? [])
     events.push({ kind: 'step', at: step.at, step })
-  // Stable: what shares a time keeps the order above.
-  return events.toSorted((a, b) => a.at - b.at)
+  // Stable: what shares a time keeps the order above. A time that does not
+  // parse goes last, as NaN would leave the sort's order undefined.
+  const order = (event: TimelineEvent) => (Number.isNaN(event.at) ? Infinity : event.at)
+  return events.toSorted((a, b) => order(a) - order(b))
 }
 
 function Time({ at }: { at: number }) {
@@ -192,15 +196,8 @@ function Timeline({ comment }: { comment: ReviewComment }) {
 }
 
 function Fields({ comment }: { comment: ReviewComment }) {
-  const state = isAsking(comment)
-    ? 'asking'
-    : isActive(comment)
-      ? comment.claimedAt
-        ? 'claimed'
-        : 'waiting'
-      : comment.status === 'open'
-        ? 'paused'
-        : 'resolved'
+  // The chip's status, and whether the reader stopped the run.
+  const state = paused(comment) ? 'paused' : statusOf(comment)
   const rows: [string, string | undefined][] = [
     ['id', comment.id],
     ['state', state],
@@ -241,12 +238,21 @@ export function DebugPanel({
   current?: string
 }) {
   const open = useShown()
-  const [selected, setSelected] = useState<string>()
+  // Picked while the widget showed `current`: a thread opened since takes over.
+  const [selected, setSelected] = useState<{ id: string; current?: string }>()
   const others = useAllComments(open)
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!isShortcut(event)) return
+      // What the reader types in a field stays theirs: Alt+Shift+D is a character on macOS.
+      const target = event.composedPath()[0]
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
+      ) {
+        return
+      }
       event.preventDefault()
       toggleDebug()
     }
@@ -260,7 +266,9 @@ export function DebugPanel({
       list.findIndex((other) => other.id === comment.id) === index,
   )
   const comment =
-    comments.find((entry) => entry.id === (selected ?? current)) ?? comments[0]
+    comments.find((entry) => entry.id === selected?.id && selected.current === current) ??
+    comments.find((entry) => entry.id === current) ??
+    comments[0]
 
   return (
     <section className="cb-debug cb-live" data-testid="cb-debug" aria-label="Debug panel">
@@ -269,7 +277,11 @@ export function DebugPanel({
         <h2>
           Debug <span className="cb-debug-hint">· {comments.length} comments</span>
         </h2>
-        <IconButton icon="x" label="Close the debug panel" onClick={toggleDebug} />
+        <IconButton
+          icon="x"
+          label="Close the debug panel"
+          onClick={() => toggleDebug(false)}
+        />
       </header>
       {comments.length > 0 && (
         <nav className="cb-debug-list" aria-label="Comments">
@@ -279,7 +291,9 @@ export function DebugPanel({
               type="button"
               aria-pressed={entry.id === comment?.id}
               title={entry.body}
-              onClick={() => setSelected(entry.id)}
+              onClick={() =>
+                setSelected({ id: entry.id, ...(current ? { current } : {}) })
+              }
             >
               {entry.id}
             </button>

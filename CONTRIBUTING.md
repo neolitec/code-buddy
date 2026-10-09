@@ -59,8 +59,8 @@ Edits are read from your clone: after a change to `skills/code-buddy/SKILL.md`
 or `hooks/`, run `/reload-plugins` before the next `/playground`.
 
 It builds the widget (a dev build, see below) when `widget/dist/` is missing,
-a release build or older than `widget/src/`, copies `playground/` to `.playground/` (git-ignored), starts the
-app there on <http://localhost:5190>, runs `/code-buddy:code-buddy .playground`
+a release build or older than `widget/src/`, copies `playground/` to
+`.playground/` (git-ignored), starts the app there on <http://localhost:5190>, runs `/code-buddy:code-buddy .playground`
 and opens the app in your browser. Comment on it: the agents edit
 `.playground/`, so `git status` stays clean. `/playground` starts again from
 a fresh copy, comments included; `/playground keep` keeps the copy and the
@@ -70,8 +70,8 @@ serves the committed app alone, without Code Buddy.
 
 The dev build (`npm run build:dev`) adds a **debug panel** to the widget: the
 wrench in the panel's header, or Alt+Shift+D, shows every comment as the widget
-holds it, its fields, its conversation in order (messages, progress steps,
-status changes) and its raw JSON, live. `npm run build` leaves it out: the
+holds it, its fields, its conversation in order (messages, progress steps, and
+the latest time of each status) and its raw JSON, live. `npm run build` leaves it out: the
 released `widget.js` has none of its code (`test/bundle.test.mjs` checks it).
 
 To try a change in an app of your own instead, start Claude Code in it with
