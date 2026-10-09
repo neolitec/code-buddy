@@ -11,6 +11,7 @@ import {
   statusOf,
   threadOf,
 } from './domain'
+import { readSession, writeSession } from './session'
 import { IconButton } from './ui'
 
 const DEBUG_CSS = `
@@ -38,14 +39,31 @@ const DEBUG_CSS = `
 .cb-debug-empty { color: var(--cb-muted); }
 `
 
-// Shown or not: one switch shared by the header's toggle and the panel.
-let shown = false
+// Shown or not, and the raw JSON unfolded or not: shared by the header's toggle
+// and the panel, and kept across reloads (hot ones included) like the panel's own.
+const KEY = 'code-buddy:debug'
+
+interface DebugState {
+  open: boolean
+  raw: boolean
+}
+
+// Read once per page load, on first use: never at the module's top level.
+let debugState: DebugState | undefined
 const listeners = new Set<() => void>()
 
-/** Shows or hides the panel; flips it without `value`. */
-export function toggleDebug(value = !shown) {
-  shown = value
+const saved = () =>
+  (debugState ??= readSession<DebugState>(KEY) ?? { open: false, raw: false })
+
+function update(change: Partial<DebugState>) {
+  debugState = { ...saved(), ...change }
+  writeSession(KEY, debugState)
   listeners.forEach((listener) => listener())
+}
+
+/** Shows or hides the panel; flips it without `value`. */
+export function toggleDebug(value = !saved().open) {
+  update({ open: value })
 }
 
 const subscribe = (listener: () => void) => {
@@ -53,7 +71,8 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener)
 }
 
-const useShown = () => useSyncExternalStore(subscribe, () => shown)
+const useShown = () => useSyncExternalStore(subscribe, () => saved().open)
+const useRaw = () => useSyncExternalStore(subscribe, () => saved().raw)
 
 /** Alt+Shift+D: by its key code, as macOS turns Alt+Shift+D into another character. */
 const isShortcut = (event: KeyboardEvent) =>
@@ -238,6 +257,7 @@ export function DebugPanel({
   current?: string
 }) {
   const open = useShown()
+  const raw = useRaw()
   // Picked while the widget showed `current`: a thread opened since takes over.
   const [selected, setSelected] = useState<{ id: string; current?: string }>()
   const others = useAllComments(open)
@@ -305,7 +325,11 @@ export function DebugPanel({
           <>
             <Fields comment={comment} />
             <Timeline comment={comment} />
-            <details className="cb-debug-raw">
+            <details
+              className="cb-debug-raw"
+              open={raw}
+              onToggle={(event) => update({ raw: event.currentTarget.open })}
+            >
               <summary>Raw ReviewComment</summary>
               <pre>{JSON.stringify(comment, null, 2)}</pre>
             </details>

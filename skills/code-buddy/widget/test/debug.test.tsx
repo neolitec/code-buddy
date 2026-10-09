@@ -1,5 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, test } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
 import { timelineOf, toggleDebug } from '../src/debug'
 import { comment, fakeServer, openPanel, openThread } from './server'
 import { renderWidget } from './widget'
@@ -146,4 +146,25 @@ test('the shortcut leaves fields and other modifiers alone', async () => {
 
   fireEvent.keyDown(document.body, shortcut)
   expect(await screen.findByTestId('cb-debug')).toBeTruthy()
+})
+
+test('a reload keeps the panel open, and its raw JSON as it was', async () => {
+  fakeServer([conversation])
+  openThread('c1')
+  const first = renderWidget()
+  fireEvent.keyDown(window, { code: 'KeyD', altKey: true, shiftKey: true })
+  const panel = within(await screen.findByTestId('cb-debug'))
+  fireEvent.click(panel.getByText('Raw ReviewComment'))
+  first.unmount()
+
+  // A reload starts the widget's modules over; the session stays.
+  vi.resetModules()
+  const { default: App } = await import('../src/App')
+  const page = document.createElement('main')
+  document.body.append(page)
+  render(<App root={page} />)
+  const raw = (await screen.findByTestId('cb-debug')).querySelector('details')
+  expect(raw?.open).toBe(true)
+  ;(await import('../src/debug')).toggleDebug(false)
+  page.remove()
 })

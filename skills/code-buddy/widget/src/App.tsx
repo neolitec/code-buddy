@@ -35,6 +35,7 @@ import {
   threadOf,
 } from './domain'
 import { DebugPanel, DebugToggle } from './debug'
+import { readSession, writeSession } from './session'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
 import { ElementMarks, ElementPicker, QuoteBubbles, TargetOutline } from './overlays'
 import {
@@ -285,27 +286,6 @@ interface UiState {
 }
 
 const PAGE_LEVEL: ReviewAnchor = { quote: '', occurrence: 0, section: '' }
-
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- the caller names what it stored
-function readSession<T>(key: string): T | undefined {
-  try {
-    const raw = sessionStorage.getItem(key)
-    // Written by writeSession with the same key and type.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    return raw ? (JSON.parse(raw) as T) : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function writeSession(key: string, value: unknown) {
-  try {
-    if (value === undefined) sessionStorage.removeItem(key)
-    else sessionStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // Storage can be unavailable (private mode); the panel then just forgets.
-  }
-}
 
 function pagePath(url: string | undefined): string {
   if (!url) return ''
