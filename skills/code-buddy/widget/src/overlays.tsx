@@ -101,15 +101,16 @@ function findElements(root: Element, comments: ReviewComment[]) {
   return comments.flatMap((comment) => {
     if (wasResolved(comment)) return []
     const element = elementFromAnchor(root, comment.anchor)
-    return element ? [{ comment, element }] : []
+    // Read with the page's changes, not on every scroll: a scroll leaves them as they are.
+    return element ? [{ comment, element, corners: cornersOf(element) }] : []
   })
 }
 
 function measureElements(found: ReturnType<typeof findElements>): Mark[] {
-  return found.map(({ comment, element }) => ({
+  return found.map(({ comment, element, corners }) => ({
     comment,
     ...boxOf(element),
-    corners: cornersOf(element),
+    corners,
   }))
 }
 
@@ -368,9 +369,9 @@ export function ElementPicker({
   onPick: (element: Element) => void
   onCancel: () => void
 }) {
-  // The last element hovered: off it (a gap between two, the widget), the
-  // outline fades out where it is, and glides from there to the next.
+  // The last element hovered: the outline stays on it, faded out, until the next.
   const [hovered, setHovered] = useState<Element>()
+  // Whether the pointer is on an element: off one (a gap, the widget), the outline fades out.
   const [over, setOver] = useState(false)
   // After a scroll, the outline stays on its element: it moves at once.
   const [scrolled, setScrolled] = useState(false)
@@ -429,11 +430,13 @@ export function ElementPicker({
     }
   }, [root, onPick, onCancel])
 
-  const rect = hovered?.getBoundingClientRect()
+  // An element gone from the page has no box: the outline leaves with it.
+  const shown = hovered?.isConnected ? hovered : undefined
+  const rect = shown?.getBoundingClientRect()
   return (
     <>
       <div className="cb-hint">Click an element to comment on it. Escape cancels.</div>
-      {rect && (
+      {shown && rect && (
         <div
           className="cb-hover"
           data-instant={scrolled || undefined}
@@ -443,10 +446,10 @@ export function ElementPicker({
             width: rect.width,
             height: rect.height,
             // Its shape too: the outline morphs to its rounded corners.
-            ...(hovered && cornersOf(hovered)),
+            ...cornersOf(shown),
           }}
         >
-          <span>{hovered?.tagName.toLowerCase()}</span>
+          <span>{shown.tagName.toLowerCase()}</span>
         </div>
       )}
     </>

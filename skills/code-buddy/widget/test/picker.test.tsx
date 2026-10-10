@@ -8,8 +8,9 @@ function page() {
   root.innerHTML = '<table><tr><td>One</td><td>Two</td></tr></table><p>Text</p>'
   document.body.append(root)
   const [first, second] = Array.from(root.querySelectorAll('td'))
-  const text = root.querySelector('p') ?? undefined
-  const boxes = new Map<Element | undefined, DOMRect>([
+  const text = root.querySelector('p')
+  if (!first || !second || !text) throw new Error('no cells or text')
+  const boxes = new Map<Element, DOMRect>([
     [first, DOMRect.fromRect({ x: 10, y: 20, width: 100, height: 30 })],
     [second, DOMRect.fromRect({ x: 110, y: 20, width: 80, height: 30 })],
     [text, DOMRect.fromRect({ x: 10, y: 70, width: 180, height: 20 })],
@@ -52,13 +53,12 @@ test('the outline glides to the next element rather than appearing anew', () => 
   expect(shown?.style.transform).toBe('translate(10px, 70px)')
   expect(shown?.style.width).toBe('180px')
   expect(shown?.textContent).toBe('p')
-  expect(shown?.hasAttribute('data-instant')).toBe(false)
 })
 
 test("the outline takes the element's rounded corners", () => {
   const { root, first, text, hover } = page()
-  text?.setAttribute('style', 'border-radius: 12px')
-  first?.setAttribute('style', 'border-radius: 8px 4px')
+  text.setAttribute('style', 'border-radius: 12px')
+  first.setAttribute('style', 'border-radius: 8px 4px')
   render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
 
   act(() => hover(text))
@@ -119,4 +119,16 @@ test('after a scroll, the outline follows its element at once', () => {
 
   act(() => hover(second))
   expect(outline()?.hasAttribute('data-instant')).toBe(false)
+})
+
+test('an element gone from the page takes its outline with it', () => {
+  const { root, first, hover } = page()
+  render(<ElementPicker root={root} onPick={() => {}} onCancel={() => {}} />)
+  act(() => hover(first))
+
+  first.remove()
+  act(() => hover(undefined))
+
+  // Not slid to the viewport's corner, where a detached element's box is.
+  expect(outline()).toBeNull()
 })

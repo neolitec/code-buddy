@@ -259,7 +259,7 @@ code { font-family: var(--cb-mono); }
 
 /* In progress: the comment is open, until Claude resolves its thread. A rainbow
    turns around it (--code-buddy-angle is registered in PAGE_CSS: a shadow root cannot). */
-.cb-mark { position: fixed; pointer-events: none; border-radius: 4px; background: rgba(166, 107, 255, .06); }
+.cb-mark { position: fixed; pointer-events: none; background: rgba(166, 107, 255, .06); }
 .cb-mark::before {
   content: ''; position: absolute; inset: 0; padding: 2px; border-radius: inherit;
   background: conic-gradient(from var(--code-buddy-angle, 0deg), #ff5f9e, #ffb340, #ffe14d, #3ddc97, #3fa7ff, #a66bff, #ff5f9e);
@@ -274,10 +274,9 @@ code { font-family: var(--cb-mono); }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
 /* On an element, as on a text: on its top left corner, the tail towards it. */
 .cb-mark-pin { position: absolute; top: 0; left: 0; }
-.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
-.cb-hover { position: fixed; top: 0; left: 0; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
-/* It glides from one element to the next, taking its size and rounded corners (not a scale: the border and the label keep theirs), fades in at first, and out off an element. */
-.cb-hover { transition-property: transform, width, height, border-radius, opacity; transition-duration: ${HOVER_MORPH_MS}ms; transition-timing-function: ease-out; animation: cb-fade-in ${HOVER_MORPH_MS}ms ease-out; }
+.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
+/* It glides to the next element: its size, not a scale, so the border and the label keep theirs. */
+.cb-hover { position: fixed; top: 0; left: 0; pointer-events: none; border: 2px dashed var(--cb-accent); background: rgba(var(--cb-accent-rgb), .08); transition-property: transform, width, height, border-radius, opacity; transition-duration: ${HOVER_MORPH_MS}ms; transition-timing-function: ease-out; animation: cb-fade-in ${HOVER_MORPH_MS}ms ease-out; }
 .cb-hover[data-instant] { transition: none; }
 .cb-hover[data-hidden] { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .cb-hover { transition: none; animation: none; } }
