@@ -8,6 +8,8 @@ export const RAINBOW_PERIOD = 720
 export const PANEL_IN_MS = 200
 /** How long the panel takes to leave: shorter, it is on its way out. */
 export const PANEL_OUT_MS = 150
+/** How long the element picker's outline takes to glide to the next element. */
+const HOVER_MORPH_MS = 120
 
 /** Styles of the widget, scoped by its shadow root. */
 export const WIDGET_CSS = `
@@ -257,7 +259,7 @@ code { font-family: var(--cb-mono); }
 
 /* In progress: the comment is open, until Claude resolves its thread. A rainbow
    turns around it (--code-buddy-angle is registered in PAGE_CSS: a shadow root cannot). */
-.cb-mark { position: fixed; pointer-events: none; border-radius: 4px; background: rgba(166, 107, 255, .06); }
+.cb-mark { position: fixed; pointer-events: none; background: rgba(166, 107, 255, .06); }
 .cb-mark::before {
   content: ''; position: absolute; inset: 0; padding: 2px; border-radius: inherit;
   background: conic-gradient(from var(--code-buddy-angle, 0deg), #ff5f9e, #ffb340, #ffe14d, #3ddc97, #3fa7ff, #a66bff, #ff5f9e);
@@ -272,8 +274,12 @@ code { font-family: var(--cb-mono); }
 .cb-quote-pin:hover, .cb-quote-pin:focus-visible { transform: scale(1.15); }
 /* On an element, as on a text: on its top left corner, the tail towards it. */
 .cb-mark-pin { position: absolute; top: 0; left: 0; }
-.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
-.cb-hover { position: fixed; pointer-events: none; border: 2px dashed var(--cb-accent); border-radius: 4px; background: rgba(var(--cb-accent-rgb), .08); }
+.cb-outline { position: fixed; pointer-events: none; border: 2px solid var(--cb-accent); background: rgba(var(--cb-accent-rgb), .12); box-shadow: 0 0 0 4px rgba(var(--cb-accent-rgb), .18); }
+/* It glides to the next element: its size, not a scale, so the border and the label keep theirs. */
+.cb-hover { position: fixed; top: 0; left: 0; pointer-events: none; border: 2px dashed var(--cb-accent); background: rgba(var(--cb-accent-rgb), .08); transition-property: transform, width, height, border-radius, opacity; transition-duration: ${HOVER_MORPH_MS}ms; transition-timing-function: ease-out; animation: cb-fade-in ${HOVER_MORPH_MS}ms ease-out; }
+.cb-hover[data-instant] { transition: none; }
+.cb-hover[data-hidden] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .cb-hover { transition: none; animation: none; } }
 .cb-hover span { position: absolute; top: -22px; left: -2px; padding: 1px 4px; border-radius: 3px; background: var(--cb-accent); color: #fff; font: 12px var(--cb-mono); white-space: nowrap; }
 .cb-hint { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border-radius: var(--cb-radius); background: var(--cb-text); color: #fff; font-size: 13px; pointer-events: none; }
 

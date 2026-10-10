@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type CSSProperties, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
 import { type ReviewComment, wasResolved } from './domain'
@@ -17,6 +17,25 @@ interface Box {
 const boxOf = (element: Element): Box => {
   const { top, left, width, height } = element.getBoundingClientRect()
   return { top, left, width, height }
+}
+
+type Corners = Pick<
+  CSSProperties,
+  | 'borderTopLeftRadius'
+  | 'borderTopRightRadius'
+  | 'borderBottomRightRadius'
+  | 'borderBottomLeftRadius'
+>
+
+/** The rounded corners of `element`, for a frame on its box. */
+const cornersOf = (element: Element): Corners => {
+  const style = getComputedStyle(element)
+  return {
+    borderTopLeftRadius: style.borderTopLeftRadius || '0px',
+    borderTopRightRadius: style.borderTopRightRadius || '0px',
+    borderBottomRightRadius: style.borderBottomRightRadius || '0px',
+    borderBottomLeftRadius: style.borderBottomLeftRadius || '0px',
+  }
 }
 
 const sameBox = (a?: Box, b?: Box) =>
@@ -75,18 +94,24 @@ function useTracked<Found, Measured>(
 
 interface Mark extends Box {
   comment: ReviewComment
+  corners: Corners
 }
 
 function findElements(root: Element, comments: ReviewComment[]) {
   return comments.flatMap((comment) => {
     if (wasResolved(comment)) return []
     const element = elementFromAnchor(root, comment.anchor)
-    return element ? [{ comment, element }] : []
+    // Read with the page's changes, not on every scroll: a scroll leaves them as they are.
+    return element ? [{ comment, element, corners: cornersOf(element) }] : []
   })
 }
 
 function measureElements(found: ReturnType<typeof findElements>): Mark[] {
-  return found.map(({ comment, element }) => ({ comment, ...boxOf(element) }))
+  return found.map(({ comment, element, corners }) => ({
+    comment,
+    ...boxOf(element),
+    corners,
+  }))
 }
 
 /**
@@ -107,8 +132,12 @@ export function ElementMarks({
 
   return (
     <>
-      {marks.map(({ comment, top, left, width, height }) => (
-        <div key={comment.id} className="cb-mark" style={{ top, left, width, height }}>
+      {marks.map(({ comment, top, left, width, height, corners }) => (
+        <div
+          key={comment.id}
+          className="cb-mark"
+          style={{ top, left, width, height, ...corners }}
+        >
           <button
             type="button"
             className="cb-quote-pin cb-mark-pin cb-live"
@@ -317,16 +346,20 @@ export function TargetOutline({ element }: { element: Element }) {
       className="cb-outline"
       data-testid="cb-target"
       style={{
-        top: box.top - 4,
-        left: box.left - 4,
-        width: box.width + 8,
-        height: box.height + 8,
+        ...box,
+        ...cornersOf(element),
       }}
     />
   )
 }
 
-/** Dashed outline follows the pointer; a click picks the element, Escape cancels. */
+/** How long the pointer stays on an element before the outline moves to it. */
+export const HOVER_DWELL_MS = 50
+
+/**
+ * Dashed outline follows the pointer, gliding from one element to the next
+ * once the pointer stays on it; a click picks the element, Escape cancels.
+ */
 export function ElementPicker({
   root,
   onPick,
@@ -336,10 +369,18 @@ export function ElementPicker({
   onPick: (element: Element) => void
   onCancel: () => void
 }) {
+  // The last element hovered: the outline stays on it, faded out, until the next.
   const [hovered, setHovered] = useState<Element>()
+  // Whether the pointer is on an element: off one (a gap, the widget), the outline fades out.
+  const [over, setOver] = useState(false)
+  // After a scroll, the outline stays on its element: it moves at once.
+  const [scrolled, setScrolled] = useState(false)
   const [, setTick] = useState(0)
 
   useEffect(() => {
+    // The element the pointer is on, until it has stayed there long enough.
+    let next: Element | undefined
+    let dwell = 0
     const target = (event: MouseEvent) => {
       const element = document.elementFromPoint(event.clientX, event.clientY)
       return element &&
@@ -349,7 +390,17 @@ export function ElementPicker({
         ? element
         : undefined
     }
-    const onMove = (event: MouseEvent) => setHovered(target(event))
+    const onMove = (event: MouseEvent) => {
+      const element = target(event)
+      if (element === next) return
+      next = element
+      clearTimeout(dwell)
+      dwell = window.setTimeout(() => {
+        if (element) setHovered(element)
+        setOver(!!element)
+        setScrolled(false)
+      }, HOVER_DWELL_MS)
+    }
     const onClick = (event: MouseEvent) => {
       const element = target(event)
       if (!element) return
@@ -360,13 +411,17 @@ export function ElementPicker({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onCancel()
     }
-    const onScroll = () => setTick((tick) => tick + 1)
+    const onScroll = () => {
+      setScrolled(true)
+      setTick((tick) => tick + 1)
+    }
     document.addEventListener('mousemove', onMove)
     document.addEventListener('click', onClick, true)
     document.addEventListener('keydown', onKey)
     document.addEventListener('scroll', onScroll, true)
     document.documentElement.style.cursor = 'crosshair'
     return () => {
+      clearTimeout(dwell)
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('click', onClick, true)
       document.removeEventListener('keydown', onKey)
@@ -375,21 +430,26 @@ export function ElementPicker({
     }
   }, [root, onPick, onCancel])
 
-  const rect = hovered?.getBoundingClientRect()
+  // An element gone from the page has no box: the outline leaves with it.
+  const shown = hovered?.isConnected ? hovered : undefined
+  const rect = shown?.getBoundingClientRect()
   return (
     <>
       <div className="cb-hint">Click an element to comment on it. Escape cancels.</div>
-      {rect && (
+      {shown && rect && (
         <div
           className="cb-hover"
+          data-instant={scrolled || undefined}
+          data-hidden={!over || undefined}
           style={{
-            top: rect.top,
-            left: rect.left,
+            transform: `translate(${rect.left}px, ${rect.top}px)`,
             width: rect.width,
             height: rect.height,
+            // Its shape too: the outline morphs to its rounded corners.
+            ...cornersOf(shown),
           }}
         >
-          <span>{hovered?.tagName.toLowerCase()}</span>
+          <span>{shown.tagName.toLowerCase()}</span>
         </div>
       )}
     </>
