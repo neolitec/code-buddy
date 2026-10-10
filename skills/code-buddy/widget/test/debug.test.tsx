@@ -143,7 +143,11 @@ test('Alt+Shift+D shows the selected comment as the widget holds it', async () =
 
   fireEvent.keyDown(window, { code: 'KeyD', key: 'Î', altKey: true, shiftKey: true })
   const panel = within(await screen.findByTestId('cb-debug'))
-  expect(panel.getByText('asking', { selector: 'dd' })).toBeTruthy()
+  expect(panel.getByText('asking', { selector: 'dd .cb-chip' })).toBeTruthy()
+  // Each move as the widget's badge, smaller: "working" is its "In progress" tone.
+  expect(
+    panel.getByText('working', { selector: '.cb-debug-timeline .cb-chip' }).className,
+  ).toBe('cb-chip cb-chip--claimed cb-chip--small')
   expect(panel.getByText('options: 32px (Like the hero) | 40px')).toBeTruthy()
   expect(panel.getByText('error: exit 1')).toBeTruthy()
   expect(panel.getByText(/"state": "asking"/)).toBeTruthy()
@@ -189,11 +193,11 @@ test('the open panel follows the comments as they change', async () => {
   renderWidget()
   toggleDebug(true)
   const panel = within(await screen.findByTestId('cb-debug'))
-  expect(panel.queryByText('working', { selector: 'dd' })).toBeNull()
+  expect(panel.queryByText('working', { selector: 'dd .cb-chip' })).toBeNull()
 
   comments[0] = comment({ state: 'working' })
   window.dispatchEvent(new Event('code-buddy:changed'))
-  expect(await panel.findByText('working', { selector: 'dd' })).toBeTruthy()
+  expect(await panel.findByText('working', { selector: 'dd .cb-chip' })).toBeTruthy()
 })
 
 test('the shortcut leaves fields and other modifiers alone', async () => {

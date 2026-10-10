@@ -84,6 +84,8 @@ code { font-family: var(--cb-mono); }
 .cb-chip--claimed { background: #dcebf8; color: var(--cb-accent-strong); }
 .cb-chip--asking, .cb-chip--answered { background: #fdf3e1; color: #7a4e0e; }
 .cb-chip--resolved { background: var(--cb-green-bg); color: var(--cb-green); }
+.cb-chip--stopped { background: var(--cb-red-bg); color: var(--cb-red); }
+.cb-chip--small { height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11px; vertical-align: 1px; }
 
 .cb-textarea {
   width: 100%; min-height: 96px; resize: vertical; padding: 10px 12px;

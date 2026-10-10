@@ -1,11 +1,17 @@
 // The debug panel: every comment as the widget holds it, for whoever works on
 // Code Buddy. Only reachable behind CODE_BUDDY_DEBUG, so a release build drops
 // this whole module: keep it free of top-level side effects.
-import { Fragment, useEffect, useState, useSyncExternalStore } from 'react'
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useCommentHistory } from './api'
-import type { ReviewComment, ReviewMessage, ReviewProgress } from './domain'
+import type { ReviewComment, ReviewMessage, ReviewProgress, ReviewState } from './domain'
 import { readSession, writeSession } from './session'
-import { IconButton } from './ui'
+import { Chip, IconButton } from './ui'
 
 const DEBUG_CSS = `
 .cb-debug { position: fixed; left: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); max-height: min(80vh, 720px); display: flex; flex-direction: column; background: var(--cb-surface); color: var(--cb-text); border: 1px solid var(--cb-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(19, 41, 75, .18); font-size: 12px; overflow: hidden; }
@@ -105,7 +111,15 @@ export function DebugToggle() {
 }
 
 type TimelineEvent =
-  | { kind: 'status'; at: number; label: string; detail?: string; run?: string }
+  | {
+      kind: 'status'
+      at: number
+      label: string
+      /** A move of the comment: drawn as the widget's badge. */
+      state?: ReviewState
+      detail?: string
+      run?: string
+    }
   | { kind: 'message'; at: number; message: ReviewMessage }
   | { kind: 'step'; at: number; step: ReviewProgress }
 
@@ -206,6 +220,7 @@ export function timelineOf(comment: ReviewComment, run?: string): TimelineEvent[
       kind: 'status',
       at: time(event.at),
       label: event.state,
+      state: event.state,
       detail: `by ${event.by}`,
       ...(event.run ? { run: event.run } : {}),
     })
@@ -231,6 +246,23 @@ export function timelineOf(comment: ReviewComment, run?: string): TimelineEvent[
     .filter((event) => run === undefined || runOf(event) === run)
     .toSorted((a, b) => order(a) - order(b))
 }
+
+/** The widget's badge tone for each state; `working` is its "In progress". */
+const TONES = {
+  open: 'open',
+  working: 'claimed',
+  asking: 'asking',
+  answered: 'answered',
+  stopped: 'stopped',
+  resolved: 'resolved',
+} as const
+
+/** A state as the widget's badge, smaller. */
+const StateChip = ({ state }: { state: ReviewState }) => (
+  <Chip tone={TONES[state]} small>
+    {state}
+  </Chip>
+)
 
 /** A run's id: a click shows only that run in the timeline, another click all of them. */
 function RunTag({
@@ -432,7 +464,11 @@ function Timeline({
                 <Time at={event.at} />
                 {event.kind === 'status' ? (
                   <div>
-                    <strong>{event.label}</strong>
+                    {event.state ? (
+                      <StateChip state={event.state} />
+                    ) : (
+                      <strong>{event.label}</strong>
+                    )}
                     {event.run && (
                       <RunTag run={event.run} selected={run} onSelect={onRun} />
                     )}
@@ -453,9 +489,9 @@ function Timeline({
 
 function Fields({ comment }: { comment: ReviewComment }) {
   const { anchor } = comment
-  const rows: [string, string | undefined][] = [
+  const rows: [string, ReactNode][] = [
     ['id', comment.id],
-    ['state', comment.state],
+    ['state', <StateChip state={comment.state} />],
     ['route', comment.route],
     ['url', comment.url],
     ['section', anchor.section],
@@ -475,7 +511,7 @@ function Fields({ comment }: { comment: ReviewComment }) {
   return (
     <dl className="cb-debug-fields">
       {rows
-        .filter((row): row is [string, string] => !!row[1])
+        .filter(([, value]) => !!value)
         .map(([name, value]) => (
           <Fragment key={name}>
             <dt>{name}</dt>
