@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import { timelineOf, toggleDebug } from '../src/debug'
 import { comment, fakeServer, openPanel, openThread } from './server'
 import { renderWidget } from './widget'
@@ -212,19 +212,32 @@ test('the live run updates a step of the history', () => {
   ).toEqual(['t8 done', 't9 done'])
 })
 
-test("a tool call's id copies the command that finds it in the transcripts", async () => {
-  const writeText = vi
-    .spyOn(navigator.clipboard, 'writeText')
-    .mockResolvedValue(undefined)
-  onTestFinished(() => writeText.mockRestore())
-  fakeServer([conversation])
+test("a tool call's id unfolds what the agent sent and got back", async () => {
+  const server = fakeServer([conversation]).fetch
+  const comments = server.getMockImplementation()
+  server.mockImplementation(async (input, init) =>
+    input.endsWith('/api/debug/tool/t2')
+      ? Response.json({
+          transcript: '/home/u/.claude/projects/-repo/s/subagents/agent-a1.jsonl',
+          name: 'Bash',
+          input: { command: 'npm test' },
+          result: 'exit 1',
+          error: true,
+        })
+      : (comments?.(input, init) ?? new Response(null, { status: 500 })),
+  )
   openThread('c1')
   renderWidget()
   toggleDebug(true)
 
   const panel = within(await screen.findByTestId('cb-debug'))
-  const id = panel.getByRole('button', { name: 't1' })
-  expect(id.title).toContain('~/.claude/projects/')
+  const id = panel.getByRole('button', { name: 't2' })
   fireEvent.click(id)
-  expect(writeText).toHaveBeenCalledWith('grep -rl t1 ~/.claude/projects/')
+  expect(id.getAttribute('aria-expanded')).toBe('true')
+  expect(await panel.findByText(/"command": "npm test"/)).toBeTruthy()
+  expect(panel.getByText('exit 1')).toBeTruthy()
+  expect(panel.getByText(/agent-a1\.jsonl/)).toBeTruthy()
+
+  fireEvent.click(id)
+  expect(panel.queryByText('exit 1')).toBeNull()
 })

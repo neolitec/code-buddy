@@ -8,7 +8,14 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import http from 'node:http'
 import path from 'node:path'
-import { SKILL_DIR, WIDGET_VERSION, findProject, servedProject } from './lib/project.mjs'
+import {
+  SKILL_DIR,
+  WIDGET_VERSION,
+  findProject,
+  isDevWidget,
+  servedProject,
+} from './lib/project.mjs'
+import { TOOL_ID, findToolCall } from './lib/transcripts.mjs'
 import {
   APP_ROUTE,
   MAX_OPTIONS,
@@ -159,6 +166,19 @@ async function handle(req, res) {
       { project: project.root, name: config.name, version: WIDGET_VERSION },
       cors,
     )
+  }
+
+  // The dev widget's debug panel: a tool call and its result, from Claude
+  // Code's transcripts. A released widget has no panel, and this answers 404.
+  const tool = /^\/api\/debug\/tool\/([^/]+)$/.exec(url.pathname)?.[1]
+  if (req.method === 'GET' && tool !== undefined) {
+    if (!isDevWidget(WIDGET) || !TOOL_ID.test(tool)) {
+      return send(res, 404, { error: 'not found' }, cors)
+    }
+    const call = await findToolCall(tool)
+    return call
+      ? send(res, 200, call, cors)
+      : send(res, 404, { error: 'not in the recent transcripts' }, cors)
   }
 
   if (url.pathname === '/api/comments') {

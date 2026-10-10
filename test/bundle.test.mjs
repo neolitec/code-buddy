@@ -21,7 +21,10 @@ async function bundle(t, dev) {
 
 test('the release build has no trace of the debug panel', async (t) => {
   const code = await bundle(t, false)
-  assert.doesNotMatch(code, /cb-debug|Debug panel|Alt\+Shift\+D|dev build|history=1/)
+  assert.doesNotMatch(
+    code,
+    /cb-debug|Debug panel|Alt\+Shift\+D|dev build|history=1|debug\/tool/,
+  )
 })
 
 test('the dev build has the debug panel', async (t) => {

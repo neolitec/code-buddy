@@ -75,7 +75,9 @@ each status, and every tool call of every run with its id) and its raw JSON,
 live. With that build, a run's steps are not dropped when it ends: they go to
 `<id>.history.jsonl`, next to the run's progress file, until the comment is
 deleted, and the server serves them with `history=1`. `comments.json` never
-holds them. `npm run build` leaves the panel out: the released `widget.js`
+holds them. A click on a tool call's id unfolds what the agent sent and got
+back: the server reads it in Claude Code's transcripts of the last 7 days
+(`~/.claude/projects/`), with a dev widget only. `npm run build` leaves the panel out: the released `widget.js`
 has none of its code (`test/bundle.test.mjs` checks it).
 
 To try a change in an app of your own instead, start Claude Code in it with

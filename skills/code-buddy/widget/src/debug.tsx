@@ -12,7 +12,7 @@ import {
   threadOf,
 } from './domain'
 import { readSession, writeSession } from './session'
-import { IconButton, toast } from './ui'
+import { IconButton } from './ui'
 
 const DEBUG_CSS = `
 .cb-debug { position: fixed; left: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); max-height: min(80vh, 720px); display: flex; flex-direction: column; background: var(--cb-surface); color: var(--cb-text); border: 1px solid var(--cb-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(19, 41, 75, .18); font-size: 12px; overflow: hidden; }
@@ -34,7 +34,11 @@ const DEBUG_CSS = `
 .cb-debug-event--status strong { color: var(--cb-accent-strong); }
 .cb-debug-event--failed strong { color: var(--cb-red); }
 .cb-debug-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; background: var(--cb-surface-2); color: var(--cb-muted); font-family: ui-monospace, monospace; }
-.cb-debug-id { border: 0; cursor: copy; font-size: inherit; }
+.cb-debug-id { border: 0; cursor: pointer; font-size: inherit; }
+.cb-debug-id[aria-expanded="true"] { background: var(--cb-accent-weak); color: var(--cb-accent-strong); }
+.cb-debug-call { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 2px; }
+.cb-debug-call pre { margin: 0; padding: 6px 8px; background: var(--cb-surface-2); border-radius: 6px; overflow: auto; max-height: 240px; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+.cb-debug-call .cb-debug-error { color: var(--cb-red); }
 .cb-debug-id:hover { color: var(--cb-accent-strong); }
 .cb-debug-raw summary { cursor: pointer; color: var(--cb-muted); }
 .cb-debug-raw pre { margin: 6px 0 0; padding: 8px; background: var(--cb-surface-2); border-radius: 6px; overflow: auto; font-size: 11px; }
@@ -184,26 +188,70 @@ function MessageEvent({ message }: { message: ReviewMessage }) {
   )
 }
 
-/**
- * A tool call's id, from Claude Code: its input and result are in the agent's
- * transcript, under ~/.claude/projects/. A click copies the command that finds it.
- */
+interface ToolCall {
+  transcript: string
+  name: string
+  input: unknown
+  result?: string
+  error?: boolean
+}
+
+/** The call as the server read it in Claude Code's transcripts; null when it could not. */
+async function fetchToolCall(id: string): Promise<ToolCall | null> {
+  try {
+    const url = new URL(`api/debug/tool/${id}`, new URL('.', import.meta.url))
+    const response = await fetch(url.href)
+    // The server's JSON has the shape it answers with.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+    return response.ok ? ((await response.json()) as ToolCall) : null
+  } catch {
+    return null
+  }
+}
+
+/** A tool call's id: a click unfolds what the agent sent and got back. */
 function ToolId({ id }: { id: string }) {
-  const find = `grep -rl ${id} ~/.claude/projects/`
+  const [open, setOpen] = useState(false)
+  const [call, setCall] = useState<ToolCall | null>()
+  const toggle = () => {
+    setOpen(!open)
+    if (call === undefined) void fetchToolCall(id).then(setCall)
+  }
   return (
-    <button
-      type="button"
-      className="cb-debug-tag cb-debug-id"
-      title={`Copy: ${find}\nIts input and result are in the agent's transcript.`}
-      onClick={() =>
-        void navigator.clipboard.writeText(find).then(
-          () => toast('Command copied'),
-          () => toast('Could not copy', true),
-        )
-      }
-    >
-      {id}
-    </button>
+    <>
+      <button
+        type="button"
+        className="cb-debug-tag cb-debug-id"
+        aria-expanded={open}
+        title="Show what the agent sent and got back"
+        onClick={toggle}
+      >
+        {id}
+      </button>
+      {open && (
+        <div className="cb-debug-call">
+          {call === undefined ? (
+            <span className="cb-debug-empty">Reading the transcripts…</span>
+          ) : call === null ? (
+            <span className="cb-debug-empty">
+              Not in Claude Code's transcripts of the last 7 days.
+            </span>
+          ) : (
+            <>
+              <span className="cb-debug-empty" title={call.transcript}>
+                {call.name} · {call.transcript.split('/').at(-1)}
+              </span>
+              <pre>{JSON.stringify(call.input, null, 2)}</pre>
+              {call.result !== undefined && (
+                <pre className={call.error ? 'cb-debug-error' : undefined}>
+                  {call.result}
+                </pre>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
