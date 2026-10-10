@@ -14,3 +14,6 @@ declare module '*.woff2' {
 
 /** The plugin's version, read from .claude-plugin/plugin.json at build time. */
 declare const CODE_BUDDY_VERSION: string
+
+/** True in a dev build (`npm run build:dev`), which has the debug panel; false in a release. */
+declare const CODE_BUDDY_DEBUG: boolean

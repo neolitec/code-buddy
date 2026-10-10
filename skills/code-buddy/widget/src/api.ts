@@ -62,6 +62,11 @@ export function useAllComments(enabled: boolean) {
   return usePolledComments(enabled ? `${API}?all=1` : undefined)
 }
 
+/** Every comment with every step of every run: the debug panel's list. */
+export function useCommentHistory(enabled: boolean) {
+  return usePolledComments(enabled ? `${API}?all=1&history=1` : undefined)
+}
+
 export async function createComment(input: NewReviewComment): Promise<ReviewComment> {
   const comment = await request<ReviewComment>(API, {
     method: 'POST',

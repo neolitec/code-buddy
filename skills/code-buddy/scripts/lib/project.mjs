@@ -11,6 +11,21 @@ export const SKILL_DIR = path.resolve(
 )
 export const WIDGET_VERSION = 1
 
+/**
+ * Whether the widget at `file` is a dev build (`npm run build:dev`, which
+ * /playground uses in a clone): the one with the debug panel. Releases ship
+ * the other, so what the panel needs is never kept for a user.
+ * @param {string} [file]
+ */
+export function isDevWidget(file = path.join(SKILL_DIR, 'widget', 'dist', 'widget.js')) {
+  try {
+    // build.mjs writes this banner on a dev build only.
+    return readFileSync(file, 'utf8').startsWith('/* code-buddy widget (dev build')
+  } catch {
+    return false
+  }
+}
+
 // Not os.tmpdir(): hooks, sandboxed shells and the server may each see a different TMPDIR.
 // hooks/register.ts finds the same folder, and the progress files in it, the same way.
 const STATE_ROOT =

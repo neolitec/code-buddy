@@ -30,8 +30,12 @@ import {
   type ReviewProgress,
   isActive,
   isAsking,
+  paused,
+  statusOf,
   threadOf,
 } from './domain'
+import { DebugPanel, DebugToggle } from './debug'
+import { readSession, writeSession } from './session'
 import { clearHighlights, paintHighlights, scrollToComment } from './highlights'
 import { ElementMarks, ElementPicker, QuoteBubbles, TargetOutline } from './overlays'
 import {
@@ -74,12 +78,12 @@ const CENTER_KEY = 'code-buddy:center'
 type View = 'page' | 'all'
 type StatusFilter = 'all' | 'open' | 'resolved'
 
-const STATUS_CHIPS = {
+const STATUS_CHIPS: Record<ReturnType<typeof statusOf>, string> = {
   open: 'Open',
   claimed: 'In progress',
   asking: 'Needs you',
   resolved: 'Resolved',
-} as const
+}
 
 const STEP_ICONS: Record<string, IconName> = {
   read: 'file-text',
@@ -283,27 +287,6 @@ interface UiState {
 
 const PAGE_LEVEL: ReviewAnchor = { quote: '', occurrence: 0, section: '' }
 
-// oxlint-disable-next-line typescript/no-unnecessary-type-parameters -- the caller names what it stored
-function readSession<T>(key: string): T | undefined {
-  try {
-    const raw = sessionStorage.getItem(key)
-    // Written by writeSession with the same key and type.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-    return raw ? (JSON.parse(raw) as T) : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function writeSession(key: string, value: unknown) {
-  try {
-    if (value === undefined) sessionStorage.removeItem(key)
-    else sessionStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    // Storage can be unavailable (private mode); the panel then just forgets.
-  }
-}
-
 function pagePath(url: string | undefined): string {
   if (!url) return ''
   const { pathname, search, hash } = new URL(url)
@@ -319,15 +302,6 @@ function scopeLabel(comment: { route: string; url?: string }): string {
 function latestText(comment: ReviewComment): string {
   const last = comment.messages?.at(-1)
   return last?.author === 'reader' ? last.body : comment.body
-}
-
-const paused = (comment: ReviewComment) =>
-  comment.status === 'open' && !!comment.cancelledAt
-
-function statusOf(comment: ReviewComment): keyof typeof STATUS_CHIPS {
-  if (comment.status === 'resolved') return 'resolved'
-  if (isAsking(comment)) return 'asking'
-  return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
 export default function App({ root }: { root: Element }) {
@@ -1044,6 +1018,7 @@ export default function App({ root }: { root: Element }) {
               </h2>
             </div>
             <div className="cb-header-actions">
+              {CODE_BUDDY_DEBUG && <DebugToggle />}
               {view !== 'all' && (
                 <IconButton
                   icon="chats"
@@ -1163,6 +1138,12 @@ export default function App({ root }: { root: Element }) {
             )}
           </footer>
         </section>
+      )}
+      {CODE_BUDDY_DEBUG && (
+        <DebugPanel
+          held={[...comments, ...(created ? [created] : [])]}
+          {...(openedId ? { current: openedId } : {})}
+        />
       )}
       <Toasts />
     </div>

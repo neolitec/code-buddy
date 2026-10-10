@@ -26,7 +26,11 @@ repository root.
 2. Run `LAUNCH prepare`, or `LAUNCH prepare keep` when the arguments say
    `keep`. It builds the widget when needed and refreshes `.playground/`. On
    `PORT_BUSY`, stop the background tasks of an earlier `/playground` in this
-   session (TaskStop) and run it again; if none is yours, report it and stop.
+   session (TaskStop) and run it again. If none is yours, ask with one
+   `AskUserQuestion`, naming the busy URLs and the `HOLDER <pid> <command>`
+   lines it printed: **Kill them and retry (Recommended)** / **Stop here**.
+   Kill → `kill <pid>…` (only those PIDs), then run it again; still busy →
+   report and stop. Stop → report what holds the ports and stop.
 3. Start the app with the Bash tool, `run_in_background: true`:
    `npm --prefix .playground run dev`.
 4. Start `LAUNCH open` the same way: it opens the browser once the app and

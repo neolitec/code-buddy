@@ -51,7 +51,7 @@ export function fakeServer(comments: ReviewComment[], { reachable = true } = {})
     return Response.json(comments)
   })
   vi.stubGlobal('fetch', fetch)
-  return { patches }
+  return { patches, fetch }
 }
 
 /** Opens the panel on a thread, as the reader left it. */

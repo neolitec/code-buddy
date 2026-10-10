@@ -85,6 +85,8 @@ export interface ReviewComment extends ReviewAnchor {
   cancellation?: ReviewCancellation
   /** Latest tool calls of the agent working on it; never stored in the file. */
   progress?: ReviewProgress[]
+  /** Every step of every run, with `history=1` only: the debug panel's. */
+  history?: ReviewProgress[]
 }
 
 export type NewReviewComment = Pick<
@@ -135,6 +137,19 @@ export function isActive(comment: Lifecycle) {
 /** True while Claude waits on the reader: the next move is theirs. */
 export function isAsking(comment: Lifecycle) {
   return comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
+}
+
+/** An open comment whose run the reader cancelled, until they send it again. */
+export const paused = (comment: Lifecycle) =>
+  comment.status === 'open' && !!comment.cancelledAt
+
+/** Where a comment stands, as its chip in the panel shows it. */
+export function statusOf(
+  comment: Lifecycle & Pick<ReviewComment, 'claimedAt'>,
+): 'open' | 'claimed' | 'asking' | 'resolved' {
+  if (comment.status === 'resolved') return 'resolved'
+  if (isAsking(comment)) return 'asking'
+  return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
 }
 
 export function normaliseQuote(text: string): string {
