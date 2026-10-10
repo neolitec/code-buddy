@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest'
 import { timelineOf, toggleDebug } from '../src/debug'
 import { comment, fakeServer, openPanel, openThread } from './server'
 import { renderWidget } from './widget'
@@ -213,8 +213,10 @@ test('the live run updates a step of the history', () => {
 })
 
 test("a tool call's id copies the command that finds it in the transcripts", async () => {
-  const writeText = vi.fn(async () => undefined)
-  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+  const writeText = vi
+    .spyOn(navigator.clipboard, 'writeText')
+    .mockResolvedValue(undefined)
+  onTestFinished(() => writeText.mockRestore())
   fakeServer([conversation])
   openThread('c1')
   renderWidget()
