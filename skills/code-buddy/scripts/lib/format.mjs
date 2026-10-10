@@ -1,5 +1,6 @@
 // The comments file's format: what every part that reads it agrees on. The
-// store writes it; the server, the hooks and the widget read it.
+// store writes it; the server, the hooks and the widget read it. Described,
+// with the step files, in docs/comments-file.md.
 
 /** The version this code reads and writes; any other is refused. */
 export const FORMAT_VERSION = 2
@@ -99,6 +100,21 @@ export const TRANSITIONS = {
  * @property {MessageV2[]} messages The whole thread, the reader's comment first.
  * @property {EventV2[]} events
  * @property {Cancellation} [cancellation] The last stopped run.
+ */
+
+/**
+ * One line of a comment's step files (`<id>.jsonl`, `<id>.history.jsonl`),
+ * never in the comments file. A tool writes one when it starts and one when it
+ * ends or fails, with the same `id`: readers merge them into one step.
+ * @typedef {object} Step
+ * @property {number} at Milliseconds since the epoch.
+ * @property {string} kind `start`, `read`, `edit`, `write`, `multiedit`,
+ *   `bash`, `search`, `web`, `mcp`, `skill`, `tool`, `thinking` or `message`.
+ * @property {string} label Empty for thinking the API redacted.
+ * @property {string} [id] Tools only: Claude Code's tool_use_id.
+ * @property {'running' | 'done' | 'failed'} [state] Tools only.
+ * @property {string} [error] Why it failed.
+ * @property {string} [run] The run it belongs to.
  */
 
 /**

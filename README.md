@@ -42,7 +42,8 @@ to stop it.
 - **Your project** only gets a few lines: a dev-only loader snippet, a
   `.code-buddy.json` config, and a `.code-buddy/` folder for the comments
   (git-ignored by default; `comments.json`, its format versioned, each thread
-  whole with its state and history). The widget's code never enters your project or
+  whole with its state and history: see
+  [the comments file](docs/comments-file.md)). The widget's code never enters your project or
   your production builds; `init` proves it by scanning a production build.
 - **The widget is framework-agnostic.** It ships its own React inside a shadow
   root, so it works on Next.js, Vite, CRA or anything served by a dev server,

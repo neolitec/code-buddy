@@ -80,6 +80,7 @@ function move(comment, to, { by, run, message }) {
  * @param {string} id
  * @param {number} [limit]
  * @param {{ history?: boolean }} [options]
+ * @returns {Promise<import('./format.mjs').Step[]>}
  */
 export async function readProgress(project, id, limit, { history = false } = {}) {
   let lines
