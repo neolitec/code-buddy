@@ -9,6 +9,19 @@ released to the `stable` branch.
 
 ### Changed
 
+- **A new comments file format (version 2).** `.code-buddy/comments.json` is
+  now `{ "version": 2, "comments": [...] }`: each comment has an explicit
+  `state` (`open`, `working`, `asking`, `stopped`, `resolved`) and an `events`
+  log of every move, never overwritten; `messages` holds the whole thread, the
+  reader's comment first, each message with an `id`, and each of Claude's with
+  the `run` (`r1`, `r2`…) that wrote it, as the agent's steps are; the anchor
+  is grouped under `anchor`. A move outside the state graph is refused, and the
+  widget shows why. Nothing is converted: **delete an existing
+  `.code-buddy/comments.json`** before updating; the server refuses the old
+  format (`COMMENTS_REFUSED`) and says so.
+- The debug panel's timeline shows every move of a comment (a thread that
+  asked twice shows two `asking`), and a run's id shows that run alone.
+
 - **The page shows where each comment stands.** Blue while the reader picks
   an element or text, and while the comment on it is written (the picked
   element stays outlined); a rainbow while its thread is open, turning around

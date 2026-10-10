@@ -4,7 +4,9 @@ import type { ReviewMessage } from '../src/domain'
 import { comment, fakeServer, openThread } from './server'
 import { renderWidget } from './widget'
 
-const question = (fields: Partial<ReviewMessage> = {}): ReviewMessage => ({
+type Message = Omit<ReviewMessage, 'id'>
+
+const question = (fields: Partial<Message> = {}): Message => ({
   author: 'claude',
   body: 'Which colour?',
   at: '2026-01-01T10:01:00.000Z',
@@ -18,12 +20,7 @@ const SEND_CHOICES = { selector: '.cb-ask button' }
 const sendChoices = () => screen.getByText('Send', SEND_CHOICES)
 
 /** Claude waits on the reader's answer to `asked`. */
-const asking = (asked: ReviewMessage) =>
-  comment({
-    claimedAt: '2026-01-01T10:00:30.000Z',
-    askedAt: asked.at,
-    messages: [asked],
-  })
+const asking = (asked: Message) => comment({ state: 'asking', messages: [asked] })
 
 test('a single choice answers at once, without the draft in the box', async () => {
   const server = fakeServer([asking(question())])
@@ -118,7 +115,7 @@ test('the chosen options stay marked once answered', async () => {
   const asked = question({ multiple: true })
   fakeServer([
     comment({
-      status: 'resolved',
+      state: 'resolved',
       messages: [
         asked,
         {
@@ -146,7 +143,7 @@ test('the chosen options stay marked once answered', async () => {
 test('the chosen single answer stays marked once answered', async () => {
   fakeServer([
     comment({
-      status: 'resolved',
+      state: 'resolved',
       messages: [
         question(),
         {

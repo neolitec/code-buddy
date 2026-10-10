@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Binding, Lock } from '../types'
+import type { Binding, CommentsFile, Lock } from '../types'
 
 type $ = EngineInterface
 /**
@@ -45,8 +45,9 @@ const CLAIM = new RegExp(String.raw`\bclaim\.mjs\s+(${WORD})`)
 const SCRIPTS_DIR = /(\/[^\s;&|()<>'"]*\/)claim\.mjs\b/
 const RESOLVE = new RegExp(String.raw`\b(?:resolve|ask)\.mjs\s+(${WORD})`)
 // What claim.mjs prints: the project it found from the shell's directory,
-// which the hooks cannot see (`--project .` after a `cd`).
-const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*)$/m
+// which the hooks cannot see (`--project .` after a `cd`), and the run it
+// started, which tags the agent's steps.
+const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*?)(?: run=(\S+))?$/m
 // A Bash command that writes files takes no lock: refused to an agent working
 // on a comment, which must use Edit or Write. Best effort, on the usual forms.
 // What an inline script writes cannot be told: always refused.
@@ -227,18 +228,17 @@ function loadProject($: $, root: string): Promise<Project> {
   return found
 }
 
-/** Ids of the comments an agent may work on, as lib/store.mjs's isActive. */
+/**
+ * Ids of the comments an agent may work on, as lib/store.mjs's isActive;
+ * undefined when the file cannot be read, or is in another format.
+ */
 async function activeCommentIds($: $, project: Project) {
   try {
-    const comments: {
-      id: string
-      status: string
-      cancelledAt?: string
-      askedAt?: string
-    }[] = JSON.parse(await $.fs.read(project.commentsFile))
+    const file: CommentsFile = JSON.parse(await $.fs.read(project.commentsFile))
+    if (file.version !== 2 || !Array.isArray(file.comments)) return undefined
     return new Set(
-      comments
-        .filter((c) => c.status === 'open' && !c.cancelledAt && !c.askedAt)
+      file.comments
+        .filter((c) => c.state === 'open' || c.state === 'working')
         .map((c) => c.id),
     )
   } catch {
@@ -280,7 +280,13 @@ async function record(
     await debug($, agent, comment, 'recorded nothing: the comment is no longer active')
     return
   }
-  await appendProgress($, project, comment, steps)
+  const run = (await bindingOf($, agent))?.run
+  await appendProgress(
+    $,
+    project,
+    comment,
+    run ? steps.map((step) => ({ ...step, run })) : steps,
+  )
   for (const step of steps) {
     const state = typeof step.state === 'string' ? ` ${step.state}` : ''
     await debug(
@@ -531,9 +537,20 @@ async function followScripts($: $, agent: string, command: string, output: strin
   const claimed = CLAIMED.exec(output)
   if (claimed?.[1] && claimed[2]) {
     const root = normalize(claimed[2].trim())
+    const run = claimed[3]
     const scripts = SCRIPTS_DIR.exec(command)?.[1]
-    await setBinding($, agent, { root, comment: claimed[1], ...(scripts && { scripts }) })
-    await debug($, agent, claimed[1], `bound to comment ${claimed[1]} in ${root}`)
+    await setBinding($, agent, {
+      root,
+      comment: claimed[1],
+      ...(run && { run }),
+      ...(scripts && { scripts }),
+    })
+    await debug(
+      $,
+      agent,
+      claimed[1],
+      `bound to comment ${claimed[1]} in ${root}${run ? `, run ${run}` : ''}`,
+    )
   } else if (CLAIM.test(command)) {
     const said = output.trim().split('\n')[0] ?? ''
     await debug(

@@ -9,7 +9,10 @@ const claim = (id: string) => `node ${SCRIPTS}/claim.mjs ${id} --project ${ROOT}
 const resolveCmd = (id: string) =>
   `node ${SCRIPTS}/resolve.mjs ${id} --project ${ROOT} "done"`
 
-type Comment = { id: string; status: string; cancelledAt?: string; askedAt?: string }
+type Comment = { id: string; state: string }
+
+/** The comments file, as lib/format.mjs writes it. */
+const commentsFile = (comments: Comment[]) => JSON.stringify({ version: 2, comments })
 
 /** The disk, processes and tools beneath the mod, in memory. */
 /** `gitRoot`: the repository the project is in, as `git rev-parse` answers. */
@@ -19,7 +22,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
       `${ROOT}/.code-buddy.json`,
       JSON.stringify({ commentsFile: '.code-buddy/comments.json' }),
     ],
-    [`${ROOT}/.code-buddy/comments.json`, JSON.stringify(comments)],
+    [`${ROOT}/.code-buddy/comments.json`, commentsFile(comments)],
   ])
   const removed: string[] = []
   on('fs.read', (_$, e) => {
@@ -74,7 +77,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     if (claimed === 'gone') return { result: 'ok', text: 'comment gone is resolved\n' }
     const root = claimed === 'moved' ? '/nowhere' : ROOT
     return claimed
-      ? { result: 'ok', text: `claimed ${claimed} (/) project=${root}\n` }
+      ? { result: 'ok', text: `claimed ${claimed} (/) project=${root} run=r1\n` }
       : { result: 'ok' }
   })
   on('turn.complete', () => ({ text: '' }))
@@ -89,7 +92,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     clock,
     removed,
     setComments: (next: Comment[]) =>
-      files.set(`${ROOT}/.code-buddy/comments.json`, JSON.stringify(next)),
+      files.set(`${ROOT}/.code-buddy/comments.json`, commentsFile(next)),
     progressPath,
     progress: (id: string) =>
       (files.get(progressPath(id) ?? '') ?? '')
@@ -116,21 +119,37 @@ const edit = (agentId: string, file: string) => ({
 })
 
 test('a claimed run records its steps and cleans up on resolve', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
 
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
 
+  // Each step belongs to the run claim.mjs started.
   expect(w.progress('c1')).toEqual([
-    expect.objectContaining({ kind: 'start', label: 'Started', state: 'done' }),
-    expect.objectContaining({ kind: 'edit', label: 'src/App.tsx', state: 'running' }),
-    expect.objectContaining({ kind: 'edit', label: 'src/App.tsx', state: 'done' }),
+    expect.objectContaining({
+      kind: 'start',
+      label: 'Started',
+      state: 'done',
+      run: 'r1',
+    }),
+    expect.objectContaining({
+      kind: 'edit',
+      label: 'src/App.tsx',
+      state: 'running',
+      run: 'r1',
+    }),
+    expect.objectContaining({
+      kind: 'edit',
+      label: 'src/App.tsx',
+      state: 'done',
+      run: 'r1',
+    }),
   ])
   expect(w.progressPath('c1')).toMatch(
     /^\/home\/u\/\.cache\/code-buddy\/[0-9a-f]{12}\/progress\/c1\.jsonl$/,
   )
 
-  w.setComments([{ id: 'c1', status: 'resolved' }])
+  w.setComments([{ id: 'c1', state: 'resolved' }])
   await $.tool.call(bash('a1', resolveCmd('c1')))
   expect(w.removed).toEqual([w.progressPath('c1')])
 
@@ -140,7 +159,7 @@ test('a claimed run records its steps and cleans up on resolve', async ($, on) =
 })
 
 test('an unbound agent is left alone', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   const ran = await $.tool.call(edit('other', `${ROOT}/src/App.tsx`))
   expect(ran.deny).toBeUndefined()
   expect(w.progressPath('c1')).toBeUndefined()
@@ -152,8 +171,8 @@ test('an unbound agent is left alone', async ($, on) => {
 
 test("a file another comment's agent holds is refused after the wait", async ($, on) => {
   const w = world(on, [
-    { id: 'c1', status: 'open' },
-    { id: 'c2', status: 'open' },
+    { id: 'c1', state: 'open' },
+    { id: 'c2', state: 'open' },
   ])
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(bash('a2', claim('c2')))
@@ -176,8 +195,8 @@ test("a file another comment's agent holds is refused after the wait", async ($,
 
 test('a lock frees once its subagent ends its turn', async ($, on) => {
   const w = world(on, [
-    { id: 'c1', status: 'open' },
-    { id: 'c2', status: 'open' },
+    { id: 'c1', state: 'open' },
+    { id: 'c2', state: 'open' },
   ])
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(bash('a2', claim('c2')))
@@ -197,9 +216,9 @@ test('a lock frees once its subagent ends its turn', async ($, on) => {
 })
 
 test('an agent whose comment the reader cancelled is told to stop', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   await $.tool.call(bash('a1', claim('c1')))
-  w.setComments([{ id: 'c1', status: 'open', cancelledAt: '2026-10-02' }])
+  w.setComments([{ id: 'c1', state: 'stopped' }])
 
   const ran = await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(ran.deny ?? ran.text).toMatch(/reply "CANCELLED"/)
@@ -213,7 +232,7 @@ test('tells the server, through the environment, that the hooks are loaded', asy
 })
 
 test('refuses an agent a Bash command that writes files, which no lock covers', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   await $.tool.call(bash('a1', claim('c1')))
   const writes = [
     `python3 - <<'EOF'\np='src/a.ts'\nopen(p, 'w').write('x')\nEOF`,
@@ -255,7 +274,7 @@ const askUser = (agentId: string) => ({
 })
 
 test("sends an agent's AskUserQuestion to the comment's thread", async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   await $.tool.call(bash('a1', claim('c1')))
   const ran = await $.tool.call(askUser('a1'))
   // The script the agent claimed with, and the project quoted: a path may hold a space.
@@ -279,8 +298,8 @@ test('locks files across the git repository, outside the project too', async ($,
   const w = world(
     on,
     [
-      { id: 'c1', status: 'open' },
-      { id: 'c2', status: 'open' },
+      { id: 'c1', state: 'open' },
+      { id: 'c2', state: 'open' },
     ],
     { gitRoot: '/repo' },
   )
@@ -300,20 +319,20 @@ test('locks files across the git repository, outside the project too', async ($,
 })
 
 test('binds the project claim.mjs found, whatever --project says', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   const cdThen = (script: string) =>
     `cd ${ROOT} && node ${SCRIPTS}/${script} c1 --project . ; echo done`
   await $.tool.call(bash('a1', cdThen('claim.mjs')))
   await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(w.progress('c1').map((step) => step.kind)).toEqual(['start', 'edit', 'edit'])
 
-  w.setComments([{ id: 'c1', status: 'resolved' }])
+  w.setComments([{ id: 'c1', state: 'resolved' }])
   await $.tool.call(bash('a1', cdThen('resolve.mjs')))
   expect(w.removed).toEqual([w.progressPath('c1')])
 })
 
 test('lets an agent write from Bash outside the repository, where no lock is needed', async ($, on) => {
-  world(on, [{ id: 'c1', status: 'open' }], { gitRoot: '/repo' })
+  world(on, [{ id: 'c1', state: 'open' }], { gitRoot: '/repo' })
   await $.tool.call(bash('a1', claim('c1')))
   const outside = [
     `cat > /tmp/scratch/g5.py <<'EOF'\nopen_report()\nEOF`,
@@ -345,21 +364,21 @@ const debugCommand = (args: string): CommandRunInput => ({
 })
 
 test('logs nothing while the hook log is off', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(w.file(LOG)).toBeUndefined()
 })
 
 test('/code-buddy-debug turns the hook log on, shows it, and turns it off', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   const turnedOn = await $.command.run(debugCommand('on'))
   expect(turnedOn.text).toMatch(/tail -f \/home\/u\/\.cache\/code-buddy\/hook\.log/)
 
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   const log = w.file(LOG) ?? ''
-  expect(log).toMatch(/ a1 c1 bound to comment c1 in \/repo\/web\n/)
+  expect(log).toMatch(/ a1 c1 bound to comment c1 in \/repo\/web, run r1\n/)
   expect(log).toMatch(/ a1 c1 locked src\/App\.tsx\n/)
   expect(log).toMatch(/ a1 c1 recorded edit done "src\/App\.tsx"\n/)
 
@@ -373,7 +392,7 @@ test('/code-buddy-debug turns the hook log on, shows it, and turns it off', asyn
 })
 
 test('logs why an agent is not bound, or no longer', async ($, on) => {
-  const w = world(on, [{ id: 'c1', status: 'open' }])
+  const w = world(on, [{ id: 'c1', state: 'open' }])
   await $.command.run(debugCommand('on'))
   await $.tool.call(bash('a1', claim('gone')))
   await $.tool.call(bash('a2', claim('moved')))

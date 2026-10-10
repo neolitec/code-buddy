@@ -1,4 +1,4 @@
-import type { ReviewAnchor, ReviewComment } from './domain'
+import type { ReviewAnchor } from './domain'
 import { elementFromAnchor, rangeFromAnchor } from './anchors'
 
 /**
@@ -22,14 +22,14 @@ export function clearHighlights(): void {
   highlightsApi()?.delete(DRAFT_HIGHLIGHT_NAME)
 }
 
-export function scrollToComment(root: Element, comment: ReviewComment): void {
-  const range = rangeFromAnchor(root, comment)
+export function scrollToComment(root: Element, anchor: ReviewAnchor): void {
+  const range = rangeFromAnchor(root, anchor)
   const target =
-    elementFromAnchor(root, comment) ??
+    elementFromAnchor(root, anchor) ??
     range?.startContainer.parentElement ??
-    (comment.section
+    (anchor.section
       ? Array.from(root.querySelectorAll('h1, h2, h3')).find(
-          (heading) => heading.textContent?.trim() === comment.section,
+          (heading) => heading.textContent?.trim() === anchor.section,
         )
       : undefined)
   target?.scrollIntoView({ behavior: 'smooth', block: 'center' })

@@ -62,7 +62,9 @@ given) resumes it and nothing is lost.
    this session, and agents would work without file locks or progress: run
    `claude --version`, tell the user Code Buddy needs Claude Code 2.1.287 or
    later (`claude update`, then a new session) or, if it is already that
-   recent, that mods may be turned off for this session; then stop.
+   recent, that mods may be turned off for this session; then stop. On
+   `COMMENTS_REFUSED`, give the user its message and stop: the comments file
+   is in a format this version does not read.
 2. Tell the user to open or reload `devUrl` from `.code-buddy.json`.
 3. React to each line:
 
@@ -95,10 +97,11 @@ answer to the same subagent.
 >    cancelled, resolved or is waiting on the reader, stop and reply
 >    `CANCELLED`.
 > 2. Read the entry in `<commentsFile>` if the line is not enough: `route`,
->    `url`, `section`, and a text `quote` or a pointed `element` (selector from
->    `body`, tag, text, HTML excerpt). `route` `*` means the whole app.
->    `messages` holds the thread after the question: your earlier answers
->    (`claude`) were applied; act on the reader's last message. A
+>    `url`, and `anchor`: `section`, a text `quote` or a pointed `element`
+>    (selector from `body`, tag, text, HTML excerpt). `route` `*` means the
+>    whole app. `messages` holds the whole thread, the reader's comment first:
+>    your earlier answers (`claude`) were applied; act on the reader's last
+>    message. `state` says where it stands. A
 >    `cancellation` field lists files an earlier, stopped agent left changed:
 >    keep, finish or revert them to match the current text. When the element
 >    is unclear, screenshot it with Playwright on `<devUrl>`.

@@ -79,8 +79,8 @@ interface Mark extends Box {
 
 function findElements(root: Element, comments: ReviewComment[]) {
   return comments.flatMap((comment) => {
-    if (comment.status !== 'open') return []
-    const element = elementFromAnchor(root, comment)
+    if (comment.state === 'resolved') return []
+    const element = elementFromAnchor(root, comment.anchor)
     return element ? [{ comment, element }] : []
   })
 }
@@ -111,8 +111,8 @@ export function ElementMarks({
           <button
             type="button"
             className="cb-quote-pin cb-mark-pin cb-live"
-            aria-label={`Open the comment on <${comment.element?.tag ?? 'element'}>`}
-            title={comment.body}
+            aria-label={`Open the comment on <${comment.anchor.element?.tag ?? 'element'}>`}
+            title={comment.messages[0]?.body}
             onClick={() => onOpen(comment)}
           >
             <Icon name="chat" />
@@ -156,9 +156,13 @@ function lineBoxes(range: Range): Box[] {
 /** The ranges of the open comments on a text, read from the page's text once. */
 function findQuotes(root: Element, comments: ReviewComment[]) {
   const quoted = comments.filter(
-    (comment) => comment.status === 'open' && !comment.element && comment.quote,
+    (comment) =>
+      comment.state !== 'resolved' && !comment.anchor.element && comment.anchor.quote,
   )
-  const ranges = rangesFromAnchors(root, quoted)
+  const ranges = rangesFromAnchors(
+    root,
+    quoted.map((comment) => comment.anchor),
+  )
   return quoted.flatMap((comment, i) => {
     const range = ranges[i]
     return range ? [{ comment, range }] : []
@@ -270,8 +274,8 @@ export function QuoteBubbles({
           type="button"
           className="cb-quote-pin cb-live"
           style={{ top, left }}
-          aria-label={`Open the comment on “${comment.quote}”`}
-          title={comment.body}
+          aria-label={`Open the comment on “${comment.anchor.quote}”`}
+          title={comment.messages[0]?.body}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => onOpen(comment)}
         >

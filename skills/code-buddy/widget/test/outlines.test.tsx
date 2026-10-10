@@ -40,7 +40,7 @@ test('an element is in progress until its thread is resolved', async () => {
   document.body.replaceChildren()
   fakeServer([
     comment({ id: 'c1', element: TITLE }),
-    comment({ id: 'c2', element: TITLE, status: 'resolved' }),
+    comment({ id: 'c2', element: TITLE, state: 'resolved' }),
   ])
   renderWidget()
 
@@ -80,7 +80,7 @@ test('a text is in progress until its thread is resolved', async () => {
   document.body.replaceChildren()
   fakeServer([
     comment({ id: 'c1', quote: 'Playground' }),
-    comment({ id: 'c2', quote: 'Play', status: 'resolved' }),
+    comment({ id: 'c2', quote: 'Play', state: 'resolved' }),
   ])
   renderWidget()
 

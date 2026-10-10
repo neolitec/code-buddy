@@ -19,6 +19,7 @@ import { TOOL_ID, findToolCall } from './lib/transcripts.mjs'
 import {
   APP_ROUTE,
   MAX_OPTIONS,
+  StoreRefusal,
   createStore,
   isActive,
   isAsking,
@@ -120,14 +121,24 @@ function sanitiseElement(element) {
   }
 }
 
+/** The anchor of a new comment: where on the page it is. */
+function sanitiseAnchor(anchor = {}) {
+  const element = sanitiseElement(anchor.element)
+  return {
+    section: String(anchor.section ?? '')
+      .trim()
+      .slice(0, 300),
+    quote: normaliseQuote(String(anchor.quote ?? '')).slice(0, 2000),
+    occurrence: Math.max(0, Math.floor(Number(anchor.occurrence) || 0)),
+    ...(element ? { element } : {}),
+  }
+}
+
+/** @returns {Parameters<typeof store.update>[1]} */
 function sanitisePatch(input) {
+  /** @type {Parameters<typeof store.update>[1]} */
   const patch = {}
-  if (input.status === 'open' || input.status === 'resolved') {
-    patch.status = input.status
-  }
-  if (typeof input.body === 'string' && input.body.trim()) {
-    patch.body = input.body.trim()
-  }
+  if (input.status === 'resolved') patch.status = input.status
   if (typeof input.cancelled === 'boolean') patch.cancelled = input.cancelled
   if (typeof input.followUp === 'string' && input.followUp.trim()) {
     patch.followUp = input.followUp.trim()
@@ -202,12 +213,9 @@ async function handle(req, res) {
         route: input.route.slice(0, 500),
         url: typeof input.url === 'string' ? input.url.slice(0, 2000) : undefined,
         body,
-        section: String(input.section ?? '')
-          .trim()
-          .slice(0, 300),
-        quote: normaliseQuote(String(input.quote ?? '')).slice(0, 2000),
-        occurrence: Math.max(0, Math.floor(Number(input.occurrence) || 0)),
-        element: sanitiseElement(input.element),
+        anchor: sanitiseAnchor(
+          typeof input.anchor === 'object' && input.anchor ? input.anchor : {},
+        ),
       })
       return send(res, 201, comment, cors)
     }
@@ -231,15 +239,13 @@ async function handle(req, res) {
   return send(res, 404, { error: 'not found' }, cors)
 }
 
+/** By comment id: its latest reader message, as `<id> <body>`, when last seen active. */
 const seen = new Map()
 
+/** The reader's latest message after their comment, when the thread ends on it. */
 function latestReply(comment) {
-  const last = comment.messages?.at(-1)
-  return last?.author === 'reader' ? last : undefined
-}
-
-function latestFollowUp(comment) {
-  return latestReply(comment)?.body
+  const last = comment.messages.at(-1)
+  return comment.messages.length > 1 && last?.author === 'reader' ? last : undefined
 }
 
 /**
@@ -250,21 +256,22 @@ function latestFollowUp(comment) {
 const quoted = (text) => JSON.stringify(text)
 
 function describe(comment) {
-  const where = comment.element
-    ? `element=<${comment.element.tag}> ${quoted(comment.element.text.slice(0, 80))}`
-    : comment.quote
-      ? `quote=${quoted(comment.quote.slice(0, 120))}`
+  const { element, quote, section: heading } = comment.anchor
+  const where = element
+    ? `element=<${element.tag}> ${quoted(element.text.slice(0, 80))}`
+    : quote
+      ? `quote=${quoted(quote.slice(0, 120))}`
       : comment.route === APP_ROUTE
         ? 'app-level'
         : 'page-level'
-  const section = comment.section ? ` section=${quoted(comment.section)}` : ''
+  const section = heading ? ` section=${quoted(heading)}` : ''
   const url = comment.url ? ` url=${comment.url}` : ''
   const reply = latestReply(comment)
   // The options the reader chose, apart: a label may hold the ", " that joins them in the text.
   const choices = reply?.choices ? ` choices=${JSON.stringify(reply.choices)}` : ''
   const text = reply
-    ? `followup=${quoted(reply.body)}${choices} messages=${comment.messages.length + 1}`
-    : `body=${quoted(comment.body)}`
+    ? `followup=${quoted(reply.body)}${choices} messages=${comment.messages.length}`
+    : `body=${quoted(comment.messages[0]?.body ?? '')}`
   return `${comment.id} route=${comment.route}${url}${section} ${where} ${text}`
 }
 
@@ -279,10 +286,11 @@ async function tick(first) {
   for (const comment of comments) {
     if (!isActive(comment)) continue
     current.add(comment.id)
-    const text = latestFollowUp(comment) ?? comment.body
+    const latest = comment.messages.findLast((message) => message.author === 'reader')
+    const text = `${latest?.id} ${latest?.body}`
     const previous = seen.get(comment.id)
     if (previous === undefined) {
-      const kind = latestFollowUp(comment) ? 'FOLLOWUP' : first ? 'OPEN' : 'NEW'
+      const kind = latestReply(comment) ? 'FOLLOWUP' : first ? 'OPEN' : 'NEW'
       console.log(`${kind} ${describe(comment)}`)
     } else if (previous !== text) {
       console.log(`EDIT ${describe(comment)}`)
@@ -297,9 +305,9 @@ async function tick(first) {
         ? `DELETED ${id}`
         : isAsking(gone)
           ? `ASKED ${id}`
-          : gone.status === 'open'
-            ? `CANCELLED ${id}`
-            : `RESOLVED ${id}`,
+          : gone.state === 'resolved'
+            ? `RESOLVED ${id}`
+            : `CANCELLED ${id}`,
     )
     seen.delete(id)
   }
@@ -308,6 +316,12 @@ async function tick(first) {
 const server = http.createServer((req, res) => {
   handle(req, res).catch((error) => {
     const cors = corsHeaders(req.headers.origin)
+    // A move the comment's state forbids, or a comments file in another
+    // format: the store's own words, meant for the reader.
+    if (error instanceof StoreRefusal) {
+      send(res, 409, { error: error.message }, cors)
+      return
+    }
     if (error instanceof ClientError) {
       // The rest of a body too large is never read: a client reusing the
       // connection would wait on it forever.
@@ -341,6 +355,15 @@ server.on('error', async (/** @type {NodeJS.ErrnoException} */ error) => {
   console.log(`PORT_BUSY ${port} is used by ${owner}`)
   process.exit(3)
 })
+
+// A comments file this version does not read: the manager says what to do.
+try {
+  await store.readAll()
+} catch (error) {
+  if (!(error instanceof StoreRefusal)) throw error
+  console.log(`COMMENTS_REFUSED ${error.message}`)
+  process.exit(2)
+}
 
 server.listen(port, '127.0.0.1', async () => {
   console.log(`READY http://127.0.0.1:${port} project=${project.root}`)
