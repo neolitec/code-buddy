@@ -491,7 +491,7 @@ function Fields({ comment }: { comment: ReviewComment }) {
   const { anchor } = comment
   const rows: [string, ReactNode][] = [
     ['id', comment.id],
-    ['state', <StateChip state={comment.state} />],
+    ['state', <StateChip key="state" state={comment.state} />],
     ['route', comment.route],
     ['url', comment.url],
     ['section', anchor.section],
