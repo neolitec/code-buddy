@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { errorCode } from './errors.mjs'
 import { withFileLock } from './filelock.mjs'
+import { isDevWidget } from './project.mjs'
 
 export const APP_ROUTE = '*'
 /** The most options a question may offer the reader. */
@@ -50,17 +51,20 @@ export function threadOf(comment) {
 }
 
 /**
- * The comment's steps, oldest first. A tool writes one line when it starts and
+ * The comment's steps, oldest first: those of its current run, or with
+ * `history`, of every run it had. A tool writes one line when it starts and
  * one when it ends or fails, both with its tool_use_id: they merge into one
  * step, in the place where it started.
  * @param {{ progressDir: string }} project
  * @param {string} id
  * @param {number} [limit]
+ * @param {{ history?: boolean }} [options]
  */
-export async function readProgress(project, id, limit) {
+export async function readProgress(project, id, limit, { history = false } = {}) {
   let lines
   try {
-    lines = (await readFile(progressPath(project, id), 'utf8')).trim().split('\n')
+    const file = history ? historyPath(project, id) : progressPath(project, id)
+    lines = (await readFile(file, 'utf8')).trim().split('\n')
   } catch {
     return []
   }
@@ -85,6 +89,9 @@ export async function readProgress(project, id, limit) {
 }
 
 const progressPath = (project, id) => path.join(project.progressDir, `${id}.jsonl`)
+// Every step of the runs that ended, for the widget's debug panel; kept with a
+// dev build of the widget only (createStore's `history`).
+const historyPath = (project, id) => path.join(project.progressDir, `${id}.history.jsonl`)
 
 /**
  * The reader's answer to Claude's question: the options they chose, from the
@@ -107,9 +114,24 @@ function readerReply(comment, text, choices) {
 
 export const normaliseQuote = (text) => text.replace(/\s+/g, ' ').trim()
 
-export function createStore(project) {
+/**
+ * @param {{ commentsFile: string, progressDir: string }} project
+ * @param {{ history?: boolean }} [options] `history`: keep each run's steps
+ *   for the debug panel when the run ends, instead of dropping them; on with a
+ *   dev build of the widget only.
+ */
+export function createStore(project, { history: keepHistory = isDevWidget() } = {}) {
   const file = project.commentsFile
   const progressFile = (id) => progressPath(project, id)
+
+  /** Drops the run's steps, kept first in the comment's history when asked. */
+  async function endRun(id) {
+    if (keepHistory) {
+      const steps = await readFile(progressFile(id), 'utf8').catch(() => '')
+      if (steps) await appendFile(historyPath(project, id), steps)
+    }
+    await rm(progressFile(id), { force: true })
+  }
   /** @type {Promise<unknown>} */
   let queue = Promise.resolve()
 
@@ -153,7 +175,7 @@ export function createStore(project) {
 
   async function cancellationOf(id) {
     const steps = await readProgress(project, id)
-    await rm(progressFile(id), { force: true })
+    await endRun(id)
     return {
       at: new Date().toISOString(),
       changed: [
@@ -228,22 +250,38 @@ export function createStore(project) {
         }
         delete comment.claimedAt
         await writeAll(comments)
-        await rm(progressFile(id), { force: true })
+        await endRun(id)
         return comment
       })
     },
 
-    list(route) {
+    /**
+     * @param {string} [route]
+     * @param {{ history?: boolean }} [options] `history`: every step of every
+     *   run, for the widget's debug panel.
+     */
+    list(route, { history = false } = {}) {
       return serialise(async () => {
         const comments = (await readAll()).filter(
           (c) => route === undefined || c.route === route || c.route === APP_ROUTE,
         )
         return Promise.all(
-          // Only a run in progress has steps to show.
           comments.map(async (c) => {
-            if (!isActive(c) || !c.claimedAt) return c
-            const progress = await readProgress(project, c.id, PROGRESS_SHOWN)
-            return progress.length ? { ...c, progress } : c
+            const listed = { ...c }
+            // Only a run in progress has steps to show.
+            if (isActive(c) && c.claimedAt) {
+              const progress = await readProgress(project, c.id, PROGRESS_SHOWN)
+              if (progress.length) listed.progress = progress
+            }
+            if (history) {
+              // The runs that ended, then the one in progress.
+              const steps = [
+                ...(await readProgress(project, c.id, undefined, { history })),
+                ...(await readProgress(project, c.id)),
+              ]
+              if (steps.length) listed.history = steps
+            }
+            return listed
           }),
         )
       })
@@ -313,7 +351,7 @@ export function createStore(project) {
         comments[index] = updated
         await writeAll(comments)
         // Resolved by the reader: no answer to file the steps under.
-        if (fields.status === 'resolved') await rm(progressFile(id), { force: true })
+        if (fields.status === 'resolved') await endRun(id)
         return updated
       })
     },
@@ -325,6 +363,7 @@ export function createStore(project) {
         if (remaining.length === comments.length) return false
         await writeAll(remaining)
         await rm(progressFile(id), { force: true })
+        await rm(historyPath(project, id), { force: true })
         return true
       })
     },

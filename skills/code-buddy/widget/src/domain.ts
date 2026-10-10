@@ -85,6 +85,8 @@ export interface ReviewComment extends ReviewAnchor {
   cancellation?: ReviewCancellation
   /** Latest tool calls of the agent working on it; never stored in the file. */
   progress?: ReviewProgress[]
+  /** Every step of every run, with `history=1` only: the debug panel's. */
+  history?: ReviewProgress[]
 }
 
 export type NewReviewComment = Pick<

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { before, test } from 'node:test'
 import { tempDir, tempProject } from './helpers.mjs'
@@ -166,4 +166,61 @@ test('a cancellation lists the files written and counts tools, not narration', a
   const cancelled = await comments.update(comment.id, { cancelled: true })
   assert.deepEqual(cancelled.cancellation.changed, ['src/a.ts'])
   assert.equal(cancelled.cancellation.steps, 3)
+})
+
+test('with a dev widget, the debug history keeps every run, and goes with the comment', async (t) => {
+  const { project, comment } = await setUp(t)
+  const comments = store.createStore(project, { history: true })
+  const history = path.join(project.progressDir, `${comment.id}.history.jsonl`)
+  await claim(comments, comment.id)
+  await appendProgress(
+    project,
+    comment.id,
+    { at: 1, id: 't1', kind: 'read', label: 'a.ts', state: 'running' },
+    { at: 2, id: 't1', kind: 'read', label: 'a.ts', state: 'done' },
+  )
+  await comments.answer(comment.id, 'Which colour?', { question: true })
+  // The reader answers: a second run, still going.
+  await comments.update(comment.id, { followUp: 'Blue' })
+  await claim(comments, comment.id)
+  await appendProgress(project, comment.id, {
+    at: 3,
+    id: 't2',
+    kind: 'edit',
+    label: 'b.ts',
+    state: 'running',
+  })
+
+  assert.equal((await comments.list('/'))[0].history, undefined)
+  const [listed] = await comments.list('/', { history: true })
+  assert.deepEqual(listed.history, [
+    { at: 1, id: 't1', kind: 'read', label: 'a.ts', state: 'done' },
+    { at: 3, id: 't2', kind: 'edit', label: 'b.ts', state: 'running' },
+  ])
+
+  await comments.remove(comment.id)
+  assert.equal(existsSync(history), false)
+})
+
+test('with a released widget, a run leaves no history', async (t) => {
+  const { project, comment } = await setUp(t)
+  const comments = store.createStore(project, { history: false })
+  await claim(comments, comment.id)
+  await appendProgress(project, comment.id, { at: 1, kind: 'thinking', label: 'plan' })
+  await comments.answer(comment.id, 'Done.')
+  assert.equal(
+    existsSync(path.join(project.progressDir, `${comment.id}.history.jsonl`)),
+    false,
+  )
+})
+
+test('only a dev build of the widget counts as one', async (t) => {
+  const dir = await tempDir(t)
+  const dev = path.join(dir, 'dev.js')
+  const release = path.join(dir, 'release.js')
+  await writeFile(dev, '/* code-buddy widget (dev build, with the debug panel): x */')
+  await writeFile(release, '/* code-buddy widget: served by the code-buddy skill */')
+  assert.equal(projects.isDevWidget(dev), true)
+  assert.equal(projects.isDevWidget(release), false)
+  assert.equal(projects.isDevWidget(path.join(dir, 'missing.js')), false)
 })

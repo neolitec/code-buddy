@@ -34,7 +34,8 @@ released to the `stable` branch.
 - **A debug panel in the widget**, for contributors: in the dev build that
   `/playground` uses (`npm run build:dev`), the wrench in the panel's header or
   Alt+Shift+D shows each comment as the widget holds it, its conversation in
-  order and its raw JSON, live. The released widget does not contain it.
+  order, every tool call of every run, and its raw JSON, live. The released
+  widget does not contain it, and keeps no steps once a run ends.
 
 - Claude can ask the reader a question in the thread (`ask.mjs`) instead of
   guessing; the comment waits on the reader's answer.

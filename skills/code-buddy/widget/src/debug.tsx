@@ -2,7 +2,7 @@
 // Code Buddy. Only reachable behind CODE_BUDDY_DEBUG, so a release build drops
 // this whole module: keep it free of top-level side effects.
 import { Fragment, useEffect, useState, useSyncExternalStore } from 'react'
-import { useAllComments } from './api'
+import { useCommentHistory } from './api'
 import {
   type ReviewComment,
   type ReviewMessage,
@@ -102,6 +102,18 @@ type TimelineEvent =
 
 const time = (at: string | undefined) => (at ? Date.parse(at) : NaN)
 
+const stepKeyOf = (step: ReviewProgress) => step.id ?? `${step.at}:${step.kind}`
+
+/**
+ * Every step of every run, from the history the panel polls, updated by the
+ * live run's steps the widget may have received since.
+ */
+function stepsOf(comment: ReviewComment): ReviewProgress[] {
+  const steps = new Map((comment.history ?? []).map((step) => [stepKeyOf(step), step]))
+  for (const step of comment.progress ?? []) steps.set(stepKeyOf(step), step)
+  return [...steps.values()]
+}
+
 /**
  * The whole conversation in order: status changes, messages and progress steps.
  * A comment keeps only the latest time of each status: one asked twice shows one `asking`.
@@ -128,8 +140,7 @@ export function timelineOf(comment: ReviewComment): TimelineEvent[] {
   }
   status(comment.cancelledAt, 'cancelled')
   status(comment.resolvedAt, 'resolved')
-  for (const step of comment.progress ?? [])
-    events.push({ kind: 'step', at: step.at, step })
+  for (const step of stepsOf(comment)) events.push({ kind: 'step', at: step.at, step })
   // Stable: what shares a time keeps the order above. A time that does not
   // parse goes last, as NaN would leave the sort's order undefined.
   const order = (event: TimelineEvent) => (Number.isNaN(event.at) ? Infinity : event.at)
@@ -260,7 +271,7 @@ export function DebugPanel({
   const raw = useRaw()
   // Picked while the widget showed `current`: a thread opened since takes over.
   const [selected, setSelected] = useState<{ id: string; current?: string }>()
-  const others = useAllComments(open)
+  const others = useCommentHistory(open)
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -281,10 +292,16 @@ export function DebugPanel({
   }, [])
 
   if (!open) return null
-  const comments = [...held, ...others.comments].filter(
-    (comment, index, list) =>
-      list.findIndex((other) => other.id === comment.id) === index,
-  )
+  const histories = new Map(others.comments.map((entry) => [entry.id, entry.history]))
+  const comments = [...held, ...others.comments]
+    .filter(
+      (comment, index, list) =>
+        list.findIndex((other) => other.id === comment.id) === index,
+    )
+    .map((comment) => {
+      const history = histories.get(comment.id)
+      return history ? { ...comment, history } : comment
+    })
   const comment =
     comments.find((entry) => entry.id === selected?.id && selected.current === current) ??
     comments.find((entry) => entry.id === current) ??

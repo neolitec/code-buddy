@@ -70,9 +70,13 @@ serves the committed app alone, without Code Buddy.
 
 The dev build (`npm run build:dev`) adds a **debug panel** to the widget: the
 wrench in the panel's header, or Alt+Shift+D, shows every comment as the widget
-holds it, its fields, its conversation in order (messages, progress steps, and
-the latest time of each status) and its raw JSON, live. `npm run build` leaves it out: the
-released `widget.js` has none of its code (`test/bundle.test.mjs` checks it).
+holds it, its fields, its conversation in order (messages, the latest time of
+each status, and every tool call of every run with its id) and its raw JSON,
+live. With that build, a run's steps are not dropped when it ends: they go to
+`<id>.history.jsonl`, next to the run's progress file, until the comment is
+deleted, and the server serves them with `history=1`. `comments.json` never
+holds them. `npm run build` leaves the panel out: the released `widget.js`
+has none of its code (`test/bundle.test.mjs` checks it).
 
 To try a change in an app of your own instead, start Claude Code in it with
 `claude --plugin-dir ~/dev/code-buddy`, after `claude plugin disable

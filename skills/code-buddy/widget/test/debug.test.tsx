@@ -168,3 +168,46 @@ test('a reload keeps the panel open, and its raw JSON as it was', async () => {
   ;(await import('../src/debug')).toggleDebug(false)
   page.remove()
 })
+
+test('a finished run keeps its tool calls, with their ids', async () => {
+  const resolved = comment({
+    status: 'resolved',
+    resolvedAt: '2026-01-01T10:00:09.000Z',
+    history: [
+      {
+        at: Date.parse('2026-01-01T10:00:02.000Z'),
+        kind: 'edit',
+        label: 'src/App.tsx',
+        id: 'toolu_01',
+        state: 'done',
+      },
+    ],
+  })
+  const { fetch } = fakeServer([resolved])
+  openPanel()
+  renderWidget()
+  toggleDebug(true)
+
+  const panel = within(await screen.findByTestId('cb-debug'))
+  expect(await panel.findByText('toolu_01')).toBeTruthy()
+  expect(fetch.mock.calls.some(([url]) => /[?&]history=1/.test(url))).toBe(true)
+})
+
+test('the live run updates a step of the history', () => {
+  const step = { at: 1, kind: 'bash', label: 'npm test', id: 't9' }
+  const events = timelineOf(
+    comment({
+      claimedAt: '2026-01-01T10:00:01.000Z',
+      history: [
+        { at: 0, kind: 'read', label: 'a.ts', id: 't8', state: 'done' },
+        { ...step, state: 'running' },
+      ],
+      progress: [{ ...step, state: 'done' }],
+    }),
+  )
+  expect(
+    events.flatMap((event) =>
+      event.kind === 'step' ? [`${event.step.id} ${event.step.state}`] : [],
+    ),
+  ).toEqual(['t8 done', 't9 done'])
+})

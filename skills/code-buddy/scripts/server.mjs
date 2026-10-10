@@ -168,7 +168,9 @@ async function handle(req, res) {
       if (route === null || route === '') {
         return send(res, 400, { error: 'route or all=1 is required' }, cors)
       }
-      return send(res, 200, await store.list(route), cors)
+      // history=1: every step of every run, for the widget's debug panel.
+      const history = url.searchParams.get('history') === '1'
+      return send(res, 200, await store.list(route ?? undefined, { history }), cors)
     }
     if (req.method === 'POST') {
       const input = await readJson(req)
