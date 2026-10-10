@@ -110,12 +110,19 @@ export function IconButton({
 
 export function Chip({
   tone,
+  small = false,
   children,
 }: {
-  tone: 'open' | 'claimed' | 'asking' | 'resolved'
+  tone: 'open' | 'claimed' | 'asking' | 'answered' | 'stopped' | 'resolved'
+  /** The debug panel's: smaller, beside a line of text. */
+  small?: boolean
   children: ReactNode
 }) {
-  return <span className={`cb-chip cb-chip--${tone}`}>{children}</span>
+  return (
+    <span className={`cb-chip cb-chip--${tone}${small ? ' cb-chip--small' : ''}`}>
+      {children}
+    </span>
+  )
 }
 
 export function Spinner({ size = 16 }: { size?: number }) {

@@ -1,14 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
-import { timelineOf, toggleDebug } from '../src/debug'
+import { agentsOf, timelineOf, toggleDebug, withSeparators } from '../src/debug'
 import { comment, fakeServer, openPanel, openThread } from './server'
 import { renderWidget } from './widget'
 
 const conversation = comment({
-  claimedAt: '2026-01-01T10:00:01.000Z',
-  askedAt: '2026-01-01T10:00:05.000Z',
+  state: 'asking',
+  events: [
+    { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+    { at: '2026-01-01T10:00:01.000Z', state: 'working', by: 'agent', run: 'r1' },
+    { at: '2026-01-01T10:00:05.000Z', state: 'asking', by: 'agent', run: 'r1' },
+  ],
   messages: [
     {
+      run: 'r1',
       author: 'claude',
       body: 'Which size?',
       at: '2026-01-01T10:00:05.000Z',
@@ -23,6 +28,7 @@ const conversation = comment({
       label: 'App.tsx',
       id: 't1',
       state: 'done',
+      run: 'r1',
     },
     {
       at: Date.parse('2026-01-01T10:00:03.000Z'),
@@ -31,6 +37,7 @@ const conversation = comment({
       id: 't2',
       state: 'failed',
       error: 'exit 1',
+      run: 'r1',
     },
   ],
 })
@@ -47,39 +54,84 @@ const label = (event: ReturnType<typeof timelineOf>[number]) =>
 
 test('the timeline puts status changes, messages and steps in order', () => {
   expect(timelineOf(conversation).map(label)).toEqual([
-    'created',
+    'open',
     'reader: Make the title bigger',
-    'claimed',
+    'working',
     'read done',
     'bash failed',
-    'claude: Which size?',
     'asking',
+    'claude: Which size?',
   ])
+})
+
+test('a thread that asked twice shows both questions, and each run alone', () => {
+  const twice = comment({
+    state: 'asking',
+    events: [
+      { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+      { at: '2026-01-01T10:00:01.000Z', state: 'working', by: 'agent', run: 'r1' },
+      { at: '2026-01-01T10:00:02.000Z', state: 'asking', by: 'agent', run: 'r1' },
+      { at: '2026-01-01T10:00:03.000Z', state: 'open', by: 'reader' },
+      { at: '2026-01-01T10:00:04.000Z', state: 'working', by: 'agent', run: 'r2' },
+      { at: '2026-01-01T10:00:06.000Z', state: 'asking', by: 'agent', run: 'r2' },
+    ],
+    history: [
+      {
+        at: Date.parse('2026-01-01T10:00:01.500Z'),
+        kind: 'read',
+        label: 'a',
+        state: 'done',
+        run: 'r1',
+      },
+      {
+        at: Date.parse('2026-01-01T10:00:05.000Z'),
+        kind: 'edit',
+        label: 'b',
+        state: 'done',
+        run: 'r2',
+      },
+    ],
+  })
+  expect(
+    timelineOf(twice)
+      .map(label)
+      .filter((entry) => entry === 'asking'),
+  ).toHaveLength(2)
+  expect(timelineOf(twice, 'r2').map(label)).toEqual(['working', 'edit done', 'asking'])
 })
 
 test('the timeline keeps its order around a time that does not parse', () => {
   const cancelled = comment({
+    state: 'resolved',
     messages: [
       { author: 'claude', body: 'Done', at: 'not a date' },
       { author: 'reader', body: 'Thanks', at: '2026-01-01T10:00:09.000Z' },
     ],
-    claimedAt: '2026-01-01T10:00:01.000Z',
-    cancelledAt: '2026-01-01T10:00:04.000Z',
-    cancellation: { at: '2026-01-01T10:00:04.000Z', changed: ['src/App.tsx'], steps: 3 },
-    resolvedAt: '2026-01-01T10:00:08.000Z',
+    events: [
+      { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+      { at: '2026-01-01T10:00:01.000Z', state: 'working', by: 'agent', run: 'r1' },
+      { at: '2026-01-01T10:00:04.000Z', state: 'stopped', by: 'reader', run: 'r1' },
+      { at: '2026-01-01T10:00:08.000Z', state: 'resolved', by: 'reader' },
+    ],
+    cancellation: {
+      at: '2026-01-01T10:00:04.000Z',
+      changed: ['src/App.tsx'],
+      steps: 3,
+      run: 'r1',
+    },
   })
   const events = timelineOf(cancelled)
   expect(events.map(label)).toEqual([
-    'created',
+    'open',
     'reader: Make the title bigger',
-    'claimed',
+    'working',
+    'stopped',
     'run cancelled',
-    'cancelled',
     'resolved',
     'reader: Thanks',
     'claude: Done',
   ])
-  expect(events[3]).toMatchObject({ detail: '3 steps, changed: src/App.tsx' })
+  expect(events[4]).toMatchObject({ detail: '3 steps, changed: src/App.tsx', run: 'r1' })
 })
 
 test('Alt+Shift+D shows the selected comment as the widget holds it', async () => {
@@ -91,10 +143,30 @@ test('Alt+Shift+D shows the selected comment as the widget holds it', async () =
 
   fireEvent.keyDown(window, { code: 'KeyD', key: 'Î', altKey: true, shiftKey: true })
   const panel = within(await screen.findByTestId('cb-debug'))
-  expect(panel.getByText('asking', { selector: 'dd' })).toBeTruthy()
+  expect(panel.getByText('asking', { selector: 'dd .cb-chip' })).toBeTruthy()
+  // Each move as the widget's badge, smaller: "working" is its "In progress" tone.
+  expect(
+    panel.getByText('working', { selector: '.cb-debug-timeline .cb-chip' }).className,
+  ).toBe('cb-chip cb-chip--claimed cb-chip--small')
   expect(panel.getByText('options: 32px (Like the hero) | 40px')).toBeTruthy()
   expect(panel.getByText('error: exit 1')).toBeTruthy()
-  expect(panel.getByText(/"askedAt": "2026-01-01T10:00:05.000Z"/)).toBeTruthy()
+  expect(panel.getByText(/"state": "asking"/)).toBeTruthy()
+  const file = panel.getByRole('link', { name: /c1\.history\.jsonl/ })
+  expect(file.getAttribute('href')).toMatch(/\/api\/debug\/steps\/c1$/)
+  expect(file.getAttribute('target')).toBe('_blank')
+
+  // Claude's message leads to its run: the timeline shows that run alone.
+  const runs = within(panel.getByRole('group', { name: 'Runs' }))
+  const message = panel.getByText('Which size?', {
+    selector: '.cb-debug p',
+  }).parentElement
+  if (!message) throw new Error("no message for Claude's question")
+  fireEvent.click(within(message).getByRole('button', { name: 'r1' }))
+  expect(runs.getByRole('button', { name: 'r1' }).getAttribute('aria-pressed')).toBe(
+    'true',
+  )
+  expect(panel.queryByText('Make the title bigger')).toBeNull()
+  expect(panel.getByText('error: exit 1')).toBeTruthy()
 
   fireEvent.click(panel.getByRole('button', { name: 'Close the debug panel' }))
   expect(screen.queryByTestId('cb-debug')).toBeNull()
@@ -121,11 +193,11 @@ test('the open panel follows the comments as they change', async () => {
   renderWidget()
   toggleDebug(true)
   const panel = within(await screen.findByTestId('cb-debug'))
-  expect(panel.queryByText('claimed', { selector: 'dd' })).toBeNull()
+  expect(panel.queryByText('working', { selector: 'dd .cb-chip' })).toBeNull()
 
-  comments[0] = comment({ claimedAt: '2026-01-01T10:00:01.000Z' })
+  comments[0] = comment({ state: 'working' })
   window.dispatchEvent(new Event('code-buddy:changed'))
-  expect(await panel.findByText('claimed', { selector: 'dd' })).toBeTruthy()
+  expect(await panel.findByText('working', { selector: 'dd .cb-chip' })).toBeTruthy()
 })
 
 test('the shortcut leaves fields and other modifiers alone', async () => {
@@ -171,8 +243,7 @@ test('a reload keeps the panel open, and its raw JSON as it was', async () => {
 
 test('a finished run keeps its tool calls, with their ids', async () => {
   const resolved = comment({
-    status: 'resolved',
-    resolvedAt: '2026-01-01T10:00:09.000Z',
+    state: 'resolved',
     history: [
       {
         at: Date.parse('2026-01-01T10:00:02.000Z'),
@@ -197,7 +268,7 @@ test('the live run updates a step of the history', () => {
   const step = { at: 1, kind: 'bash', label: 'npm test', id: 't9' }
   const events = timelineOf(
     comment({
-      claimedAt: '2026-01-01T10:00:01.000Z',
+      state: 'working',
       history: [
         { at: 0, kind: 'read', label: 'a.ts', id: 't8', state: 'done' },
         { ...step, state: 'running' },
@@ -240,4 +311,56 @@ test("a tool call's id unfolds what the agent sent and got back", async () => {
 
   fireEvent.click(id)
   expect(panel.queryByText('exit 1')).toBeNull()
+})
+
+test('a line marks each run, a bolder one where the agent changes', async () => {
+  const runs = comment({
+    state: 'working',
+    events: [
+      { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+      {
+        at: '2026-01-01T10:00:01.000Z',
+        state: 'working',
+        by: 'agent',
+        run: 'r1',
+        agent: 'a1aaaaaaaa',
+      },
+      { at: '2026-01-01T10:00:02.000Z', state: 'asking', by: 'agent', run: 'r1' },
+      { at: '2026-01-01T10:00:03.000Z', state: 'open', by: 'reader' },
+      {
+        at: '2026-01-01T10:00:04.000Z',
+        state: 'working',
+        by: 'agent',
+        run: 'r2',
+        agent: 'a1aaaaaaaa',
+      },
+      { at: '2026-01-01T10:00:05.000Z', state: 'asking', by: 'agent', run: 'r2' },
+      { at: '2026-01-01T10:00:06.000Z', state: 'open', by: 'reader' },
+      { at: '2026-01-01T10:00:07.000Z', state: 'working', by: 'agent', run: 'r3' },
+    ],
+    // A run whose claim named no agent: its steps do.
+    history: [
+      {
+        at: Date.parse('2026-01-01T10:00:08.000Z'),
+        kind: 'read',
+        label: 'a',
+        run: 'r3',
+        agent: 'b2bbbbbbbb',
+      },
+    ],
+  })
+  expect(
+    withSeparators(timelineOf(runs), agentsOf(runs)).flatMap((row) =>
+      row.kind === 'separator' ? [`${row.run} ${row.agent} ${row.newAgent}`] : [],
+    ),
+  ).toEqual(['r1 a1aaaaaaaa true', 'r2 a1aaaaaaaa false', 'r3 b2bbbbbbbb true'])
+
+  fakeServer([runs])
+  openThread('c1')
+  renderWidget()
+  toggleDebug(true)
+  const panel = within(await screen.findByTestId('cb-debug'))
+  expect(panel.getByText('Agent a1aaaaaa · run r1')).toBeTruthy()
+  expect(panel.getByText('Run r2')).toBeTruthy()
+  expect(panel.getByText('Agent b2bbbbbb · run r3')).toBeTruthy()
 })

@@ -6,7 +6,7 @@ import { renderWidget } from './widget'
 test('a claimed comment shows what Claude is doing, and can be cancelled', async () => {
   const server = fakeServer([
     comment({
-      claimedAt: '2026-01-01T10:00:30.000Z',
+      state: 'working',
       progress: [{ at: 1, kind: 'read', label: 'src/App.tsx', state: 'running' }],
     }),
   ])
@@ -49,8 +49,7 @@ test('an open comment says when no session watches', async () => {
 test('a question waits on the reader', async () => {
   const server = fakeServer([
     comment({
-      claimedAt: '2026-01-01T10:00:30.000Z',
-      askedAt: '2026-01-01T10:01:00.000Z',
+      state: 'asking',
       messages: [
         {
           author: 'claude',
@@ -78,7 +77,7 @@ test('a question waits on the reader', async () => {
 test('a stopped comment lists the files Claude changed, and sends again', async () => {
   const server = fakeServer([
     comment({
-      cancelledAt: '2026-01-01T10:02:00.000Z',
+      state: 'stopped',
       cancellation: {
         at: '2026-01-01T10:02:00.000Z',
         changed: ['src/App.tsx', 'src/title.css'],
@@ -112,7 +111,7 @@ test('a stopped comment lists the files Claude changed, and sends again', async 
 test('a stopped comment says when Claude had changed nothing', async () => {
   fakeServer([
     comment({
-      cancelledAt: '2026-01-01T10:02:00.000Z',
+      state: 'stopped',
       cancellation: { at: '2026-01-01T10:02:00.000Z', changed: [], steps: 3 },
     }),
   ])
@@ -125,11 +124,69 @@ test('a stopped comment says when Claude had changed nothing', async () => {
 })
 
 test('a comment stopped before it started says so', async () => {
-  fakeServer([comment({ cancelledAt: '2026-01-01T10:02:00.000Z' })])
+  fakeServer([comment({ state: 'stopped' })])
   openThread('c1')
   renderWidget()
 
   expect((await screen.findByTestId('cb-cancelled')).textContent).toBe(
     'Claude was stopped. It had not started yet.',
+  )
+})
+
+test("a move the comment can no longer make shows the server's words", async () => {
+  const server = fakeServer([comment({ state: 'working' })]).fetch
+  const comments = server.getMockImplementation()
+  server.mockImplementation(async (input, init) =>
+    init?.method === 'PATCH'
+      ? Response.json({ error: 'comment c1 is resolved' }, { status: 409 })
+      : (comments?.(input, init) ?? new Response(null, { status: 500 })),
+  )
+  openThread('c1')
+  renderWidget()
+
+  fireEvent.click(await screen.findByTestId('cb-cancel'))
+  expect(await screen.findByText('comment c1 is resolved')).toBeTruthy()
+})
+
+test("sending again starts from the reader's latest words, not their first", async () => {
+  fakeServer([
+    comment({
+      state: 'stopped',
+      messages: [
+        { author: 'claude', body: 'Done.', at: '2026-01-01T10:01:00.000Z', run: 'r1' },
+        { author: 'reader', body: 'Bigger still', at: '2026-01-01T10:02:00.000Z' },
+      ],
+    }),
+  ])
+  openThread('c1')
+  renderWidget()
+
+  const box = await screen.findByRole('textbox', {
+    name: 'Edit the comment before sending it again',
+  })
+  expect(box).toHaveProperty('value', 'Bigger still')
+})
+
+test("Claude's answer to a follow-up waits on the reader, who resolves it", async () => {
+  const server = fakeServer([
+    comment({
+      state: 'answered',
+      messages: [
+        { author: 'claude', body: 'Bigger.', at: '2026-01-01T10:01:00.000Z', run: 'r1' },
+        { author: 'reader', body: 'Bolder too', at: '2026-01-01T10:02:00.000Z' },
+        { author: 'claude', body: 'Bolder.', at: '2026-01-01T10:03:00.000Z', run: 'r2' },
+      ],
+    }),
+  ])
+  openThread('c1')
+  renderWidget()
+
+  expect(
+    await screen.findByPlaceholderText('Follow up, clarify, ask for a change…'),
+  ).toBeTruthy()
+  expect(screen.queryByTestId('cb-working')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+  await waitFor(() =>
+    expect(server.patches).toEqual([{ id: 'c1', patch: { status: 'resolved' } }]),
   )
 })

@@ -17,9 +17,12 @@ before(async (t) => {
 
 test('prints the project it found, for the hooks, which cannot see the shell directory', async (t) => {
   const root = await tempProject(t)
-  const comment = await store
-    .createStore(projects.project(root))
-    .create({ route: '/', url: 'http://localhost/', body: 'Make it blue' })
+  const comment = await store.createStore(projects.project(root)).create({
+    route: '/',
+    url: 'http://localhost/',
+    anchor: { section: '', quote: '', occurrence: 0 },
+    body: 'Make it blue',
+  })
   const claimed = await run(
     process.execPath,
     [path.join(SCRIPTS, 'claim.mjs'), comment.id, '--project', '.'],
@@ -28,5 +31,51 @@ test('prints the project it found, for the hooks, which cannot see the shell dir
   assert.equal(claimed.code, 0)
   // The shell's directory, as the operating system names it (/private/var on macOS).
   const found = await realpath(root)
-  assert.equal(claimed.stdout, `claimed ${comment.id} (/) project=${found}\n`)
+  assert.equal(claimed.stdout, `claimed ${comment.id} (/) project=${found} run=r1\n`)
+})
+
+test('records the agent the hooks name in the run it opens', async (t) => {
+  const root = await tempProject(t)
+  const comments = store.createStore(projects.project(root))
+  const comment = await comments.create({
+    route: '/',
+    anchor: { section: '', quote: '', occurrence: 0 },
+    body: 'Make it blue',
+  })
+  const claimed = await run(
+    process.execPath,
+    [path.join(SCRIPTS, 'claim.mjs'), comment.id, '--project', root],
+    { env: { CODE_BUDDY_AGENT: 'a1b2c3' } },
+  )
+  assert.equal(claimed.code, 0, claimed.stderr)
+  const [saved] = await comments.readAll()
+  assert.deepEqual(saved.events[saved.events.length - 1], {
+    at: saved.events[saved.events.length - 1].at,
+    state: 'working',
+    by: 'agent',
+    run: 'r1',
+    agent: 'a1b2c3',
+  })
+})
+
+test('refuses a comment that waits on the reader, and says to stop', async (t) => {
+  const root = await tempProject(t)
+  const comments = store.createStore(projects.project(root))
+  const comment = await comments.create({
+    route: '/',
+    anchor: { section: '', quote: '', occurrence: 0 },
+    body: 'Make it blue',
+  })
+  await comments.answer(comment.id, 'Which blue?', { question: true })
+  const claimed = await run(process.execPath, [
+    path.join(SCRIPTS, 'claim.mjs'),
+    comment.id,
+    '--project',
+    root,
+  ])
+  assert.equal(claimed.code, 1)
+  assert.equal(
+    claimed.stderr,
+    `comment ${comment.id} is waiting on the reader's answer; stop working on it\n`,
+  )
 })

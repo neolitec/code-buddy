@@ -10,7 +10,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Binding, Lock } from '../types'
+import type { Binding, CommentsFile, Lock } from '../types'
 
 type $ = EngineInterface
 /**
@@ -45,8 +45,9 @@ const CLAIM = new RegExp(String.raw`\bclaim\.mjs\s+(${WORD})`)
 const SCRIPTS_DIR = /(\/[^\s;&|()<>'"]*\/)claim\.mjs\b/
 const RESOLVE = new RegExp(String.raw`\b(?:resolve|ask)\.mjs\s+(${WORD})`)
 // What claim.mjs prints: the project it found from the shell's directory,
-// which the hooks cannot see (`--project .` after a `cd`).
-const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*)$/m
+// which the hooks cannot see (`--project .` after a `cd`), and the run it
+// started, which tags the agent's steps.
+const CLAIMED = /^claimed (\S+) \(.*\) project=(\/.*?)(?: run=(\S+))?$/m
 // A Bash command that writes files takes no lock: refused to an agent working
 // on a comment, which must use Edit or Write. Best effort, on the usual forms.
 // What an inline script writes cannot be told: always refused.
@@ -81,6 +82,8 @@ const relative = (root: string, file: string) =>
     : file.startsWith(`${root}/`)
       ? file.slice(root.length + 1)
       : undefined
+/** An agent id as a shell word: Claude Code's ids are letters and digits. */
+const shellWord = (value: string) => value.replace(/[^\w-]/g, '')
 const unquote = (value: string) => value.replace(/^["']|["']$/g, '')
 const basename = (file: string) => file.slice(file.lastIndexOf('/') + 1)
 /** `file` as seen from `root`, `../` included. */
@@ -227,18 +230,17 @@ function loadProject($: $, root: string): Promise<Project> {
   return found
 }
 
-/** Ids of the comments an agent may work on, as lib/store.mjs's isActive. */
+/**
+ * Ids of the comments an agent may work on, as lib/store.mjs's isActive;
+ * undefined when the file cannot be read, or is in another format.
+ */
 async function activeCommentIds($: $, project: Project) {
   try {
-    const comments: {
-      id: string
-      status: string
-      cancelledAt?: string
-      askedAt?: string
-    }[] = JSON.parse(await $.fs.read(project.commentsFile))
+    const file: CommentsFile = JSON.parse(await $.fs.read(project.commentsFile))
+    if (file.version !== 2 || !Array.isArray(file.comments)) return undefined
     return new Set(
-      comments
-        .filter((c) => c.status === 'open' && !c.cancelledAt && !c.askedAt)
+      file.comments
+        .filter((c) => c.state === 'open' || c.state === 'working')
         .map((c) => c.id),
     )
   } catch {
@@ -280,7 +282,13 @@ async function record(
     await debug($, agent, comment, 'recorded nothing: the comment is no longer active')
     return
   }
-  await appendProgress($, project, comment, steps)
+  const run = (await bindingOf($, agent))?.run
+  await appendProgress(
+    $,
+    project,
+    comment,
+    steps.map((step) => ({ ...step, ...(run && { run }), agent })),
+  )
   for (const step of steps) {
     const state = typeof step.state === 'string' ? ` ${step.state}` : ''
     await debug(
@@ -497,7 +505,26 @@ async function setBinding($: $, agent: string, binding: Binding | undefined) {
   $.ui.status(count ? `code-buddy: ${count} agent(s) on comments` : undefined)
 }
 
-async function finish($: $, agent: string, project: Project, comment: string) {
+/**
+ * The script that ended the run, done: the store archived the run's steps
+ * while it still ran. Only into a history the store keeps (dev widget).
+ */
+async function closeLastStep($: $, project: Project, comment: string, step: Step) {
+  const history = `${project.progressDir}/${comment}.history.jsonl`
+  if (!(await $.fs.exists(history).catch(() => false))) return
+  const text = await $.fs.read(history).catch(() => '')
+  await $.fs.write(history, `${text}${JSON.stringify(step)}\n`)
+}
+
+async function finish(
+  $: $,
+  agent: string,
+  project: Project,
+  comment: string,
+  last: Step,
+) {
+  const run = (await bindingOf($, agent))?.run
+  await closeLastStep($, project, comment, { ...last, ...(run && { run }), agent })
   await setBinding($, agent, undefined)
   const released = await releaseAll($, project, comment)
   await debug(
@@ -515,25 +542,43 @@ async function finish($: $, agent: string, project: Project, comment: string) {
 /**
  * claim.mjs binds the agent to its comment; resolve.mjs and ask.mjs end its
  * run. A failed chained command may still have run one: its output and the
- * comment's state tell. Returns true when the run ended.
+ * comment's state tell. Returns true when the run ended. `last`: the step of
+ * this command, once it ran.
  */
-async function followScripts($: $, agent: string, command: string, output: string) {
+async function followScripts(
+  $: $,
+  agent: string,
+  command: string,
+  output: string,
+  last: (project: Project) => Step,
+) {
   const ended = command.match(RESOLVE)?.[1]
   const binding = await bindingOf($, agent)
   if (ended && binding?.comment === ended) {
     const project = await projectOf($, agent, binding)
     const active = project && (await activeCommentIds($, project))
     if (project && !active?.has(ended)) {
-      await finish($, agent, project, ended)
+      await finish($, agent, project, ended, last(project))
       return true
     }
   }
   const claimed = CLAIMED.exec(output)
   if (claimed?.[1] && claimed[2]) {
     const root = normalize(claimed[2].trim())
+    const run = claimed[3]
     const scripts = SCRIPTS_DIR.exec(command)?.[1]
-    await setBinding($, agent, { root, comment: claimed[1], ...(scripts && { scripts }) })
-    await debug($, agent, claimed[1], `bound to comment ${claimed[1]} in ${root}`)
+    await setBinding($, agent, {
+      root,
+      comment: claimed[1],
+      ...(run && { run }),
+      ...(scripts && { scripts }),
+    })
+    await debug(
+      $,
+      agent,
+      claimed[1],
+      `bound to comment ${claimed[1]} in ${root}${run ? `, run ${run}` : ''}`,
+    )
   } else if (CLAIM.test(command)) {
     const said = output.trim().split('\n')[0] ?? ''
     await debug(
@@ -632,11 +677,25 @@ export const register: Register = (on) => {
       await record($, agent, project, binding.comment, [{ ...step, state: 'running' }])
     }
 
-    const ran = await next(e)
+    // claim.mjs records which agent opened the run: the hooks alone know it.
+    const ran = await next(
+      e.tool === 'Bash' && CLAIM.test(args.command ?? '')
+        ? {
+            ...e,
+            command: `export CODE_BUDDY_AGENT=${shellWord(agent)}; ${args.command}`,
+          }
+        : e,
+    )
     if (ran.deny !== undefined) return ran
 
     const command = e.tool === 'Bash' ? (args.command ?? '') : ''
-    if (await followScripts($, agent, command, ran.text ?? '')) return ran
+    const done = (where: Project): Step => ({
+      at: Date.now(),
+      id: e.tool_use_id,
+      ...describe(where, e.tool, args),
+      state: ran.isError ? 'failed' : 'done',
+    })
+    if (await followScripts($, agent, command, ran.text ?? '', done)) return ran
     // Read again: claim.mjs may have just bound the agent.
     const bound = await bindingOf($, agent)
     const boundProject = bound && (await projectOf($, agent, bound))
@@ -646,12 +705,7 @@ export const register: Register = (on) => {
       await unlock($, boundProject, bound.comment, '@build')
       await debug($, agent, bound.comment, 'build ended: released the build lock')
     }
-    const step: Step = {
-      at: Date.now(),
-      id: e.tool_use_id,
-      ...describe(boundProject, e.tool, args),
-      state: ran.isError ? 'failed' : 'done',
-    }
+    const step = done(boundProject)
     if (ran.isError) step.error = short((ran.text ?? '').trim().split('\n')[0] ?? '', 160)
     await record($, agent, boundProject, bound.comment, [step])
     return ran

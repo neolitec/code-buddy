@@ -119,7 +119,7 @@ test('creates a comment and lists it for its page', async () => {
   )
   assert.equal(created.status, 201)
   const listed = await json(await fetch(`${base}/api/comments?route=%2Fabout`))
-  assert.ok(listed.some((c) => c.body === 'Typo here' && c.status === 'open'))
+  assert.ok(listed.some((c) => c.messages[0].body === 'Typo here' && c.state === 'open'))
 })
 
 test("takes the reader's choice among the options Claude asked with", async () => {
@@ -153,12 +153,129 @@ test("takes the reader's choice among the options Claude asked with", async () =
   const event = await nextLine(`FOLLOWUP ${created.id} `, printed)
   assert.match(event, / followup="List\\n\\nDenser" choices=\["List"\] messages=3$/)
   assert.deepEqual(answered.messages.at(-1), {
+    id: 'm3',
     author: 'reader',
     body: 'List\n\nDenser',
     choices: ['List'],
     at: answered.messages.at(-1).at,
   })
-  assert.equal(answered.askedAt, undefined)
+  assert.equal(answered.state, 'open')
+})
+
+test('groups the anchor of a new comment, and describes it to the manager', async () => {
+  const printed = output.length
+  const created = await json(
+    await post(
+      JSON.stringify({
+        route: '/shop',
+        body: 'Bigger',
+        anchor: {
+          section: ' Beans ',
+          quote: 'Ethiopia   Guji',
+          occurrence: 1.7,
+          element: { selector: 'h2', tag: 'h2', text: 'Ethiopia Guji', html: '<h2>' },
+        },
+      }),
+    ),
+  )
+  assert.deepEqual(created.anchor, {
+    section: 'Beans',
+    quote: 'Ethiopia Guji',
+    occurrence: 1,
+    element: { selector: 'h2', tag: 'h2', text: 'Ethiopia Guji', html: '<h2>' },
+  })
+  const event = await nextLine(`NEW ${created.id} `, printed)
+  assert.match(event, / section="Beans" element=<h2> "Ethiopia Guji" body="Bigger"$/)
+})
+
+test('refuses a move the comment cannot make with 409, in words for the reader', async () => {
+  const creating = output.length
+  const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))
+  await nextLine(`NEW ${created.id} `, creating)
+  const patch = (body) =>
+    fetch(`${base}/api/comments/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  // Nothing to follow up while it waits for Claude.
+  const refused = await patch({ followUp: 'And red' })
+  assert.equal(refused.status, 409)
+  assert.deepEqual(await json(refused), { error: `comment ${created.id} is open` })
+
+  const printed = output.length
+  assert.equal((await patch({ cancelled: true })).status, 200)
+  await nextLine(`CANCELLED ${created.id}`, printed)
+  // A double click, or a stop a poll late: nothing changes, and no error.
+  assert.equal((await patch({ cancelled: true })).status, 200)
+  assert.equal((await patch({ status: 'resolved' })).status, 200)
+  const late = await patch({ cancelled: true })
+  assert.equal(late.status, 200)
+  assert.equal((await json(late)).state, 'resolved')
+})
+
+test('tells the manager Claude answered a follow-up, which waits on the reader', async () => {
+  const creating = output.length
+  const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))
+  await nextLine(`NEW ${created.id} `, creating)
+  /** @param {string} script @param {string} text */
+  const reply = (script, text) =>
+    run(process.execPath, [
+      path.join(SCRIPTS, script),
+      created.id,
+      '--project',
+      root,
+      text,
+    ])
+  await run(process.execPath, [
+    path.join(SCRIPTS, 'claim.mjs'),
+    created.id,
+    '--project',
+    root,
+  ])
+  let printed = output.length
+  assert.equal(
+    (await reply('resolve.mjs', 'Done.')).stdout,
+    `resolved ${created.id} (/)\n`,
+  )
+  await nextLine(`RESOLVED ${created.id}`, printed)
+  printed = output.length
+  await fetch(`${base}/api/comments/${created.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ followUp: 'More' }),
+  })
+  await nextLine(`FOLLOWUP ${created.id} `, printed)
+  await run(process.execPath, [
+    path.join(SCRIPTS, 'claim.mjs'),
+    created.id,
+    '--project',
+    root,
+  ])
+  printed = output.length
+  assert.equal(
+    (await reply('resolve.mjs', 'More.')).stdout,
+    `answered ${created.id} (/)\n`,
+  )
+  await nextLine(`ANSWERED ${created.id}`, printed)
+})
+
+test('tells the manager when the reader resolves a comment themselves', async () => {
+  const creating = output.length
+  const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))
+  await nextLine(`NEW ${created.id} `, creating)
+  const printed = output.length
+  await fetch(`${base}/api/comments/${created.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'resolved' }),
+  })
+  await nextLine(`RESOLVED ${created.id}`, printed)
+})
+
+test("a released widget's server serves no step files", async () => {
+  const response = await fetch(`${base}/api/debug/steps/c1`)
+  assert.equal(response.status, 404)
 })
 
 test('rejects malformed JSON with 400, and never echoes an exception', async () => {
@@ -182,7 +299,32 @@ test('answers an internal error with a fixed message', async () => {
   const response = await fetch(`${base}/api/comments?route=%2F`)
   assert.equal(response.status, 500)
   assert.deepEqual(await json(response), { error: 'internal error' })
-  await writeFile(path.join(root, '.code-buddy', 'comments.json'), '[]')
+  await writeFile(
+    path.join(root, '.code-buddy', 'comments.json'),
+    JSON.stringify({ version: 2, comments: [] }),
+  )
+})
+
+test('refuses to start on a comments file in the old format', async (t) => {
+  const old = await tempProject(t)
+  await mkdir(path.join(old, '.code-buddy'), { recursive: true })
+  await writeFile(path.join(old, '.code-buddy', 'comments.json'), '[]')
+  const started = await run(
+    process.execPath,
+    [path.join(SCRIPTS, 'server.mjs'), '--project', old],
+    {
+      env: {
+        CODE_BUDDY_PORT: String(await freePort()),
+        CODE_BUDDY_HOOKS: '1',
+        CODE_BUDDY_STATE_DIR: await tempDir(t),
+      },
+    },
+  )
+  assert.equal(started.code, 2)
+  assert.match(
+    started.stdout,
+    /^COMMENTS_REFUSED old comments format: delete .*\.code-buddy\/comments\.json$/m,
+  )
 })
 
 test('a second server for the same project reports the port as busy', async () => {

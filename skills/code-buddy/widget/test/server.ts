@@ -1,20 +1,61 @@
 import { vi } from 'vitest'
-import type { ReviewComment, ReviewCommentPatch } from '../src/domain'
+import type {
+  NewReviewComment,
+  ReviewAnchor,
+  ReviewComment,
+  ReviewCommentPatch,
+  ReviewMessage,
+} from '../src/domain'
 
 export const PAGE = '/'
 
-/** A comment on the page, open and not yet claimed: override what the test needs. */
-export function comment(fields: Partial<ReviewComment> = {}): ReviewComment {
+type Fields = Partial<Omit<ReviewComment, 'anchor' | 'messages'>> &
+  Partial<ReviewAnchor> & {
+    /** The reader's comment, the thread's first message. */
+    body?: string
+    /** The thread after the reader's comment: numbered from m2. */
+    messages?: Omit<ReviewMessage, 'id'>[]
+  }
+
+/**
+ * A comment on the page, open and not yet claimed: override what the test
+ * needs, the anchor's fields and the thread after the comment included.
+ */
+export function comment({
+  body = 'Make the title bigger',
+  messages = [],
+  section = '',
+  quote = '',
+  occurrence = 0,
+  element,
+  ...fields
+}: Fields = {}): ReviewComment {
+  const createdAt = fields.createdAt ?? '2026-01-01T10:00:00.000Z'
+  const state = fields.state ?? 'open'
   return {
     id: 'c1',
     route: PAGE,
     url: `http://localhost${PAGE}`,
-    body: 'Make the title bigger',
-    status: 'open',
-    createdAt: '2026-01-01T10:00:00.000Z',
-    section: '',
-    quote: '',
-    occurrence: 0,
+    anchor: { section, quote, occurrence, ...(element ? { element } : {}) },
+    state: 'open',
+    createdAt,
+    messages: [
+      { id: 'm1', author: 'reader', body, at: createdAt },
+      ...messages.map((message, index) => ({ id: `m${index + 2}`, ...message })),
+    ],
+    // The state is always the last event's.
+    events: [
+      { at: createdAt, state: 'open', by: 'reader' },
+      ...(state === 'open'
+        ? []
+        : [
+            {
+              at: createdAt,
+              state,
+              by: state === 'stopped' ? 'reader' : 'agent',
+            } as const,
+          ]),
+    ],
     ...fields,
   }
 }
@@ -40,8 +81,8 @@ export function fakeServer(comments: ReviewComment[], { reachable = true } = {})
       const body = typeof init.body === 'string' ? init.body : ''
       // The widget sends a new comment: the test reads it back as one.
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-      const fields = JSON.parse(body) as Partial<ReviewComment>
-      const created = comment({ id: `c${comments.length + 1}`, ...fields })
+      const { anchor, ...fields } = JSON.parse(body) as NewReviewComment
+      const created = comment({ id: `c${comments.length + 1}`, ...fields, ...anchor })
       comments.push(created)
       return Response.json(created)
     }

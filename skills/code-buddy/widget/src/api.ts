@@ -11,10 +11,26 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   if (!headers.has('content-type')) headers.set('content-type', 'application/json')
   const response = await fetch(url, { ...init, headers })
-  if (!response.ok) throw new Error(`Request failed (${response.status})`)
+  if (!response.ok) throw new Error(await failure(response))
   // The server is ours: its JSON has the shape the caller asks for.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
+}
+
+/** The server's own words for a refusal (409: a move the comment cannot make), else the status. */
+async function failure(response: Response): Promise<string> {
+  if (response.status === 409) {
+    const body: unknown = await response.json().catch(() => undefined)
+    if (
+      body &&
+      typeof body === 'object' &&
+      'error' in body &&
+      typeof body.error === 'string'
+    ) {
+      return body.error
+    }
+  }
+  return `Request failed (${response.status})`
 }
 
 const changed = () => window.dispatchEvent(new Event(CHANGED))
@@ -36,7 +52,7 @@ function usePolledComments(url: string | undefined) {
     }
   }, [url])
 
-  const hasOpen = comments.some((comment) => comment.status === 'open')
+  const hasOpen = comments.some((comment) => comment.state !== 'resolved')
 
   useEffect(() => {
     if (!url) return undefined

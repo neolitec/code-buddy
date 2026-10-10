@@ -3,7 +3,22 @@ import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/prom
 import path from 'node:path'
 import { errorCode } from './errors.mjs'
 import { withFileLock } from './filelock.mjs'
+import {
+  FORMAT_VERSION,
+  FormatError,
+  canMove,
+  currentRun,
+  nextMessageId,
+  nextRunId,
+  parseFile,
+  wasResolved,
+} from './format.mjs'
 import { isDevWidget } from './project.mjs'
+
+/** @typedef {import('./format.mjs').Actor} Actor */
+/** @typedef {import('./format.mjs').CommentV2} CommentV2 */
+/** @typedef {import('./format.mjs').MessageV2} MessageV2 */
+/** @typedef {import('./format.mjs').State} State */
 
 export const APP_ROUTE = '*'
 /** The most options a question may offer the reader. */
@@ -13,41 +28,53 @@ const WRITE_KINDS = new Set(['edit', 'write', 'multiedit'])
 // What the agent says and thinks accompanies its steps; it is not one.
 const NARRATION_KINDS = new Set(['thinking', 'message'])
 
-/** Open, not stopped by the reader, and not waiting on the reader's answer. */
+/** Waiting for an agent, or worked on by one: what agents and the server act on. */
 export const isActive = (comment) =>
-  comment.status === 'open' && !comment.cancelledAt && !comment.askedAt
+  comment.state === 'open' || comment.state === 'working'
 
 /** Claude asked the reader a question in the thread: nothing to do until they answer. */
-export const isAsking = (comment) =>
-  comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
+export const isAsking = (comment) => comment.state === 'asking'
 
 /** A refusal a script reports to the agent and exits on, with nothing written. */
 export class StoreRefusal extends Error {}
 
-/** Why an agent may not work on `comment`, in the words the scripts print. */
-export const stateOf = (comment) =>
-  comment.cancelledAt
-    ? 'cancelled'
-    : comment.status !== 'open'
-      ? comment.status
-      : comment.askedAt
-        ? "waiting on the reader's answer"
-        : 'open'
+/** @type {Record<State, string>} */
+const STATE_WORDS = {
+  open: 'open',
+  working: 'being worked on',
+  asking: "waiting on the reader's answer",
+  answered: 'answered, waiting on the reader',
+  stopped: 'cancelled',
+  resolved: 'resolved',
+}
 
-/** The thread as a list, including the question and a legacy `resolution`. */
-export function threadOf(comment) {
-  const question = { author: 'reader', body: comment.body, at: comment.createdAt }
-  if (comment.messages?.length) return [question, ...comment.messages]
-  return comment.resolution
-    ? [
-        question,
-        {
-          author: 'claude',
-          body: comment.resolution,
-          at: comment.resolvedAt ?? comment.createdAt,
-        },
-      ]
-    : [question]
+/** Where `comment` stands, in the words the scripts print. */
+export const stateOf = (comment) => STATE_WORDS[comment.state] ?? String(comment.state)
+
+/**
+ * Moves `comment` to `to`, or refuses a move outside the graph of
+ * format.mjs: logs the event, and adds `message` to the thread. Every state
+ * change goes through it.
+ * @param {CommentV2} comment
+ * @param {State} to
+ * @param {{ by: Actor, run?: string, agent?: string, message?: Omit<MessageV2, 'id' | 'at'> }} how
+ * @returns {string} When it moved.
+ */
+function move(comment, to, { by, run, agent, message }) {
+  if (!canMove(comment.state, to)) {
+    throw new StoreRefusal(`comment ${comment.id} is ${stateOf(comment)}`)
+  }
+  const at = new Date().toISOString()
+  comment.events.push({
+    at,
+    state: to,
+    by,
+    ...(run ? { run } : {}),
+    ...(agent ? { agent } : {}),
+  })
+  comment.state = to
+  if (message) comment.messages.push({ id: nextMessageId(comment), ...message, at })
+  return at
 }
 
 /**
@@ -59,6 +86,7 @@ export function threadOf(comment) {
  * @param {string} id
  * @param {number} [limit]
  * @param {{ history?: boolean }} [options]
+ * @returns {Promise<import('./format.mjs').Step[]>}
  */
 export async function readProgress(project, id, limit, { history = false } = {}) {
   let lines
@@ -86,6 +114,22 @@ export async function readProgress(project, id, limit, { history = false } = {})
     }
   }
   return limit ? steps.slice(-limit) : steps
+}
+
+/** @param {string} file */
+const readOrEmpty = (file) => readFile(file, 'utf8').catch(() => '')
+
+/**
+ * The comment's step files as they are on disk, one JSON line per step: the
+ * runs that ended, then the one in progress. Empty when it has none.
+ * @param {{ progressDir: string }} project
+ * @param {string} id
+ */
+export async function stepFiles(project, id) {
+  return (
+    (await readOrEmpty(historyPath(project, id))) +
+    (await readOrEmpty(progressPath(project, id)))
+  )
 }
 
 const progressPath = (project, id) => path.join(project.progressDir, `${id}.jsonl`)
@@ -124,11 +168,26 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
   const file = project.commentsFile
   const progressFile = (id) => progressPath(project, id)
 
-  /** Drops the run's steps, kept first in the comment's history when asked. */
-  async function endRun(id) {
+  /**
+   * Drops the run's steps, kept first in the comment's history when asked,
+   * each tagged with `run` when the hooks did not tag it.
+   * @param {string} id
+   * @param {string} [run]
+   */
+  async function endRun(id, run) {
     if (keepHistory) {
-      const steps = await readFile(progressFile(id), 'utf8').catch(() => '')
-      if (steps) await appendFile(historyPath(project, id), steps)
+      const lines = (await readFile(progressFile(id), 'utf8').catch(() => ''))
+        .split('\n')
+        .filter(Boolean)
+        .flatMap((line) => {
+          try {
+            const step = JSON.parse(line)
+            return [`${JSON.stringify(run && !step.run ? { ...step, run } : step)}\n`]
+          } catch {
+            return []
+          }
+        })
+      if (lines.length) await appendFile(historyPath(project, id), lines.join(''))
     }
     await rm(progressFile(id), { force: true })
   }
@@ -156,28 +215,65 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
    */
   const exclusive = (task) => serialise(() => withFileLock(file, task))
 
+  /**
+   * The comments; a file in another format is refused, and left untouched.
+   * @returns {Promise<CommentV2[]>}
+   */
   async function readAll() {
+    let text
     try {
-      return JSON.parse(await readFile(file, 'utf8'))
+      text = await readFile(file, 'utf8')
     } catch (error) {
       if (errorCode(error) === 'ENOENT') return []
+      throw error
+    }
+    try {
+      return parseFile(text, file).comments
+    } catch (error) {
+      if (error instanceof FormatError) throw new StoreRefusal(error.message)
       throw error
     }
   }
 
   // Written to a temp file first: the watcher and the agents' scripts read it concurrently.
+  /** @param {CommentV2[]} comments */
   async function writeAll(comments) {
     await mkdir(path.dirname(file), { recursive: true })
     const temp = `${file}.${process.pid}.tmp`
-    await writeFile(temp, `${JSON.stringify(comments, null, 2)}\n`)
+    const content = { version: FORMAT_VERSION, comments }
+    await writeFile(temp, `${JSON.stringify(content, null, 2)}\n`)
     await rename(temp, file)
   }
 
-  async function cancellationOf(id) {
+  /**
+   * Runs `change` on the comment `id`, under the lock, and writes the result.
+   * Throwing a StoreRefusal from it writes nothing.
+   * @template T
+   * @param {string} id
+   * @param {(comment: CommentV2) => Promise<T> | T} change
+   * @returns {Promise<T>}
+   */
+  const changeOne = (id, change) =>
+    exclusive(async () => {
+      const comments = await readAll()
+      const comment = comments.find((entry) => entry.id === id)
+      if (!comment) throw new StoreRefusal(`no comment with id ${id}`)
+      const result = await change(comment)
+      await writeAll(comments)
+      return result
+    })
+
+  /**
+   * @param {string} id
+   * @param {string} at When the reader stopped it: the `stopped` event's time.
+   * @param {string} [run]
+   * @returns {Promise<import('./format.mjs').Cancellation>}
+   */
+  async function cancellationOf(id, at, run) {
     const steps = await readProgress(project, id)
-    await endRun(id)
+    await endRun(id, run)
     return {
-      at: new Date().toISOString(),
+      at,
       changed: [
         ...new Set(
           steps
@@ -187,6 +283,7 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
         ),
       ],
       steps: steps.filter((s) => !NARRATION_KINDS.has(s.kind)).length,
+      ...(run ? { run } : {}),
     }
   }
 
@@ -194,27 +291,35 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
     readAll,
 
     /**
-     * Runs `change` on every comment, under the lock, and writes the result.
-     * Throwing a StoreRefusal from it writes nothing.
-     * @template T
-     * @param {(comments: any[]) => Promise<T> | T} change
-     * @returns {Promise<T>}
+     * An agent starts working on the comment: a new run, which records the
+     * agent's id when the hooks gave it. Claimed again while working, it
+     * stays in the run it is in.
+     * @param {string} id
+     * @param {{ agent?: string }} [options]
+     * @returns {Promise<{ comment: CommentV2, run: string }>}
      */
-    transact(change) {
-      return exclusive(async () => {
-        const comments = await readAll()
-        const result = await change(comments)
-        await writeAll(comments)
-        return result
+    claim(id, { agent } = {}) {
+      return changeOne(id, (comment) => {
+        const working = currentRun(comment)
+        if (working) return { comment, run: working }
+        if (comment.state !== 'open') {
+          throw new StoreRefusal(`comment ${id} is ${stateOf(comment)}`)
+        }
+        const run = nextRunId(comment)
+        move(comment, 'working', { by: 'agent', run, agent })
+        return { comment, run }
       })
     },
 
     /**
-     * Files Claude's answer under the comment. A question leaves the comment
-     * open and waiting on the reader: asked only in the manager's chat, it used
-     * to leave a thread open with no answer and no agent, showing "Waiting for
-     * Claude" to a reader who was the one being waited on. The run's steps are
-     * dropped: comments.json holds the discussion, not the agent's log.
+     * Files Claude's answer under the comment, with the run that wrote it.
+     * The first answer resolves it; once it was resolved, a later one leaves
+     * it `answered`, and only the reader resolves it again. A
+     * question leaves the comment waiting on the reader: asked only in the
+     * manager's chat, it used to leave a thread open with no answer and no
+     * agent, showing "Waiting for Claude" to a reader who was the one being
+     * waited on. The run's steps are dropped: the comments file holds the
+     * discussion, not the agent's log.
      * A question may offer `options`, the reader picking one, or several when
      * `multiple`; they can always answer in their own words instead.
      * @param {string} id
@@ -222,35 +327,34 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
      * @param {{ question?: boolean, options?: { label: string, description?: string }[], multiple?: boolean }} [options]
      */
     answer(id, body, { question = false, options, multiple = false } = {}) {
-      return exclusive(async () => {
-        const comments = await readAll()
-        const comment = comments.find((entry) => entry.id === id)
-        if (!comment) throw new StoreRefusal(`no comment with id ${id}`)
+      return changeOne(id, async (comment) => {
+        // An agent answers only a comment it may work on: the graph also lets
+        // the reader resolve one that waits on them.
         if (!isActive(comment)) {
           throw new StoreRefusal(`comment ${id} is ${stateOf(comment)}`)
         }
-        const now = new Date().toISOString()
-        comment.messages = [
-          ...threadOf(comment).slice(1),
-          {
-            author: 'claude',
-            body,
-            at: now,
-            ...(question ? { question: true } : {}),
-            ...(question && options?.length ? { options } : {}),
-            ...(question && options?.length && multiple ? { multiple: true } : {}),
-          },
-        ]
-        if (question) {
-          comment.askedAt = now
-        } else {
-          comment.status = 'resolved'
-          comment.resolution = body
-          comment.resolvedAt = now
+        // Answered without a claim: the run starts here.
+        if (comment.state === 'open') {
+          move(comment, 'working', { by: 'agent', run: nextRunId(comment) })
         }
-        delete comment.claimedAt
-        await writeAll(comments)
-        await endRun(id)
+        const run = currentRun(comment)
+        move(
+          comment,
+          question ? 'asking' : wasResolved(comment) ? 'answered' : 'resolved',
+          {
+            by: 'agent',
+            run,
+            message: {
+              ...(run ? { run } : {}),
+              author: 'claude',
+              body,
+              ...(question ? { question: true } : {}),
+              ...(question && options?.length ? { options } : {}),
+              ...(question && options?.length && multiple ? { multiple: true } : {}),
+            },
+          },
+        )
+        await endRun(id, run)
         return comment
       })
     },
@@ -267,9 +371,10 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
         )
         return Promise.all(
           comments.map(async (c) => {
+            /** @type {CommentV2 & { progress?: unknown[], history?: unknown[] }} */
             const listed = { ...c }
             // Only a run in progress has steps to show.
-            if (isActive(c) && c.claimedAt) {
+            if (c.state === 'working') {
               const progress = await readProgress(project, c.id, PROGRESS_SHOWN)
               if (progress.length) listed.progress = progress
             }
@@ -287,72 +392,73 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
       })
     },
 
-    create(input) {
+    /**
+     * The reader's new comment: their words open the thread.
+     * @param {{ route: string, url?: string, anchor: import('./format.mjs').Anchor, body: string }} input
+     * @returns {Promise<CommentV2>}
+     */
+    create({ route, url, anchor, body }) {
       return exclusive(async () => {
         const comments = await readAll()
+        const at = new Date().toISOString()
+        /** @type {CommentV2} */
         const comment = {
           id: randomUUID(),
-          ...input,
-          status: 'open',
-          createdAt: new Date().toISOString(),
+          route,
+          ...(url ? { url } : {}),
+          anchor,
+          state: 'open',
+          createdAt: at,
+          messages: [{ id: 'm1', author: 'reader', body, at }],
+          events: [{ at, state: 'open', by: 'reader' }],
         }
         await writeAll([...comments, comment])
         return comment
       })
     },
 
-    update(id, patch) {
+    /**
+     * The reader's move, as the widget sends it: stop the run (`cancelled:
+     * true`), send it again (`cancelled: false`, with new words in `text`),
+     * answer or follow up (`followUp`, `choices`), or resolve it (`status`).
+     * A stop or a re-send the comment is past changes nothing: a double
+     * click, or a click on a button a poll late, is not an error. Undefined
+     * when there is no such comment.
+     * @param {string} id
+     * @param {{ cancelled?: boolean, followUp?: string, choices?: string[], text?: string, status?: 'resolved' }} patch
+     * @returns {Promise<CommentV2 | undefined>}
+     */
+    update(id, { cancelled, followUp, choices, text, status }) {
       return exclusive(async () => {
         const comments = await readAll()
-        const index = comments.findIndex((c) => c.id === id)
-        if (index === -1) return undefined
-        const current = comments[index]
-        const { cancelled, followUp, choices, text, ...fields } = patch
-        const now = new Date().toISOString()
-        const reply = readerReply(current, followUp, choices)
-        if (reply) {
-          fields.status = 'open'
-          fields.messages = [
-            ...threadOf(current).slice(1),
-            { author: 'reader', ...reply, at: now },
-          ]
+        const comment = comments.find((entry) => entry.id === id)
+        if (!comment) return undefined
+        const run = currentRun(comment)
+        // Too late once Claude asked or answered: the stop does nothing, as
+        // the Cancel button the reader clicked was there a poll ago.
+        if (cancelled === true && isActive(comment)) {
+          const at = move(comment, 'stopped', { by: 'reader', run })
+          comment.cancellation = await cancellationOf(id, at, run)
         }
-        if (text && cancelled === false) {
-          const last = current.messages?.at(-1)
-          if (last?.author === 'reader') {
+        if (cancelled === false && comment.state === 'stopped') {
+          move(comment, 'open', { by: 'reader' })
+          const last = comment.messages.findLast((message) => message.author === 'reader')
+          if (text && last) {
             // New words, no longer the options the reader had chosen.
-            const edited = { author: last.author, body: text, at: last.at }
-            fields.messages = [...current.messages.slice(0, -1), edited]
-          } else {
-            fields.body = text
+            const { choices: _, ...kept } = last
+            comment.messages[comment.messages.indexOf(last)] = { ...kept, body: text }
           }
         }
-        const cancelling = cancelled === true && isActive(current)
-        const updated = {
-          ...current,
-          ...fields,
-          cancelledAt: cancelling
-            ? now
-            : cancelled === false || fields.status
-              ? undefined
-              : current.cancelledAt,
-          cancellation: cancelling ? await cancellationOf(id) : current.cancellation,
-          claimedAt:
-            fields.status || cancelled !== undefined ? undefined : current.claimedAt,
-          // The reader's answer, or resolving it themselves, ends the wait.
-          askedAt: fields.status ? undefined : current.askedAt,
-          resolvedAt:
-            fields.status === 'resolved' && current.status !== 'resolved'
-              ? now
-              : fields.status === 'open'
-                ? undefined
-                : current.resolvedAt,
+        const reply = readerReply(comment, followUp, choices)
+        if (reply)
+          move(comment, 'open', { by: 'reader', message: { author: 'reader', ...reply } })
+        if (status === 'resolved' && comment.state !== 'resolved') {
+          move(comment, 'resolved', { by: 'reader', run })
+          // Resolved by the reader: no answer to file the steps under.
+          await endRun(id, run)
         }
-        comments[index] = updated
         await writeAll(comments)
-        // Resolved by the reader: no answer to file the steps under.
-        if (fields.status === 'resolved') await endRun(id)
-        return updated
+        return comment
       })
     },
 

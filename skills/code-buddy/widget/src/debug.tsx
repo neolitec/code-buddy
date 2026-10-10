@@ -1,18 +1,17 @@
 // The debug panel: every comment as the widget holds it, for whoever works on
 // Code Buddy. Only reachable behind CODE_BUDDY_DEBUG, so a release build drops
 // this whole module: keep it free of top-level side effects.
-import { Fragment, useEffect, useState, useSyncExternalStore } from 'react'
-import { useCommentHistory } from './api'
 import {
-  type ReviewComment,
-  type ReviewMessage,
-  type ReviewProgress,
-  paused,
-  statusOf,
-  threadOf,
-} from './domain'
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import { useCommentHistory } from './api'
+import type { ReviewComment, ReviewMessage, ReviewProgress, ReviewState } from './domain'
 import { readSession, writeSession } from './session'
-import { IconButton } from './ui'
+import { Chip, IconButton } from './ui'
 
 const DEBUG_CSS = `
 .cb-debug { position: fixed; left: 16px; bottom: 16px; width: min(520px, calc(100vw - 32px)); max-height: min(80vh, 720px); display: flex; flex-direction: column; background: var(--cb-surface); color: var(--cb-text); border: 1px solid var(--cb-border); border-radius: 12px; box-shadow: 0 12px 32px rgba(19, 41, 75, .18); font-size: 12px; overflow: hidden; }
@@ -43,6 +42,16 @@ const DEBUG_CSS = `
 .cb-debug-raw summary { cursor: pointer; color: var(--cb-muted); }
 .cb-debug-raw pre { margin: 6px 0 0; padding: 8px; background: var(--cb-surface-2); border-radius: 6px; overflow: auto; font-size: 11px; }
 .cb-debug-empty { color: var(--cb-muted); }
+.cb-debug-sep { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; color: var(--cb-muted); font: 600 11px/1.2 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.cb-debug-sep::before, .cb-debug-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--cb-border); }
+.cb-debug-sep small { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.cb-debug-sep--agent { margin-top: 16px; color: var(--cb-accent-strong); font-size: 12px; }
+.cb-debug-sep--agent::before, .cb-debug-sep--agent::after { border-top: 2px solid var(--cb-accent); }
+.cb-debug-sep--agent span { padding: 2px 10px; border: 2px solid var(--cb-accent); border-radius: 999px; background: var(--cb-accent-weak); }
+.cb-debug-file { align-self: flex-start; color: var(--cb-accent-strong); }
+.cb-debug-runs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; color: var(--cb-muted); }
+.cb-debug-run { border: 0; cursor: pointer; font-size: inherit; }
+.cb-debug-run[aria-pressed="true"] { background: var(--cb-accent-weak); color: var(--cb-accent-strong); }
 `
 
 // Shown or not, and the raw JSON unfolded or not: shared by the header's toggle
@@ -102,7 +111,15 @@ export function DebugToggle() {
 }
 
 type TimelineEvent =
-  | { kind: 'status'; at: number; label: string; detail?: string }
+  | {
+      kind: 'status'
+      at: number
+      label: string
+      /** A move of the comment: drawn as the widget's badge. */
+      state?: ReviewState
+      detail?: string
+      run?: string
+    }
   | { kind: 'message'; at: number; message: ReviewMessage }
   | { kind: 'step'; at: number; step: ReviewProgress }
 
@@ -120,37 +137,154 @@ function stepsOf(comment: ReviewComment): ReviewProgress[] {
   return [...steps.values()]
 }
 
-/**
- * The whole conversation in order: status changes, messages and progress steps.
- * A comment keeps only the latest time of each status: one asked twice shows one `asking`.
- */
-export function timelineOf(comment: ReviewComment): TimelineEvent[] {
-  const events: TimelineEvent[] = []
-  const status = (at: string | undefined, label: string, detail?: string) => {
-    if (at)
-      events.push({ kind: 'status', at: time(at), label, ...(detail ? { detail } : {}) })
+/** The runs the comment had, in order: a claim starts each. */
+export const runsOf = (comment: ReviewComment) => [
+  ...new Set(comment.events.flatMap((event) => (event.run ? [event.run] : []))),
+]
+
+/** Who ran each run: the agent its `working` event names, else its steps'. */
+export function agentsOf(comment: ReviewComment): Map<string, string> {
+  const agents = new Map<string, string>()
+  for (const event of comment.events) {
+    if (event.run && event.agent) agents.set(event.run, event.agent)
   }
-  status(comment.createdAt, 'created')
-  for (const message of threadOf(comment)) {
+  for (const step of stepsOf(comment)) {
+    if (step.run && step.agent && !agents.has(step.run)) agents.set(step.run, step.agent)
+  }
+  return agents
+}
+
+/** A line across the timeline where a run starts; a bolder one when its agent is another. */
+type Separator = { kind: 'separator'; run: string; agent?: string; newAgent: boolean }
+
+/** The timeline with a separator before each run, marking where the agent changes. */
+export function withSeparators(
+  events: TimelineEvent[],
+  agents: Map<string, string>,
+): (TimelineEvent | Separator)[] {
+  const rows: (TimelineEvent | Separator)[] = []
+  let lastRun: string | undefined
+  let lastAgent: string | undefined
+  for (const event of events) {
+    const run = runOf(event)
+    if (run && run !== lastRun) {
+      const agent = agents.get(run)
+      rows.push({
+        kind: 'separator',
+        run,
+        ...(agent ? { agent } : {}),
+        newAgent: !!agent && agent !== lastAgent,
+      })
+      lastRun = run
+      if (agent) lastAgent = agent
+    }
+    rows.push(event)
+  }
+  return rows
+}
+
+/** An agent's id, short enough to read; `main` is the session's main loop. */
+const agentName = (agent: string) =>
+  agent === 'main' ? 'main session' : agent.slice(0, 8)
+
+function SeparatorRow({ separator }: { separator: Separator }) {
+  const { run, agent, newAgent } = separator
+  return (
+    <li
+      className={`cb-debug-sep${newAgent ? ' cb-debug-sep--agent' : ''}`}
+      title={agent ? `Agent ${agent}` : undefined}
+    >
+      <span>
+        {newAgent && agent ? `Agent ${agentName(agent)} · run ${run}` : `Run ${run}`}
+        {!newAgent && agent && <small> · same agent</small>}
+      </span>
+    </li>
+  )
+}
+
+const runOf = (event: TimelineEvent) =>
+  event.kind === 'status'
+    ? event.run
+    : event.kind === 'message'
+      ? event.message.run
+      : event.step.run
+
+/**
+ * The whole conversation in order: every move from the comment's events,
+ * messages and progress steps. With `run`, only what belongs to that run.
+ */
+export function timelineOf(comment: ReviewComment, run?: string): TimelineEvent[] {
+  const events: TimelineEvent[] = []
+  for (const event of comment.events) {
+    events.push({
+      kind: 'status',
+      at: time(event.at),
+      label: event.state,
+      state: event.state,
+      detail: `by ${event.by}`,
+      ...(event.run ? { run: event.run } : {}),
+    })
+  }
+  for (const message of comment.messages) {
     events.push({ kind: 'message', at: time(message.at), message })
   }
-  status(comment.claimedAt, 'claimed')
-  status(comment.askedAt, 'asking')
   const cancellation = comment.cancellation
   if (cancellation) {
-    status(
-      cancellation.at,
-      'run cancelled',
-      `${cancellation.steps} steps, changed: ${cancellation.changed.join(', ') || 'nothing'}`,
-    )
+    events.push({
+      kind: 'status',
+      at: time(cancellation.at),
+      label: 'run cancelled',
+      detail: `${cancellation.steps} steps, changed: ${cancellation.changed.join(', ') || 'nothing'}`,
+      ...(cancellation.run ? { run: cancellation.run } : {}),
+    })
   }
-  status(comment.cancelledAt, 'cancelled')
-  status(comment.resolvedAt, 'resolved')
   for (const step of stepsOf(comment)) events.push({ kind: 'step', at: step.at, step })
   // Stable: what shares a time keeps the order above. A time that does not
   // parse goes last, as NaN would leave the sort's order undefined.
   const order = (event: TimelineEvent) => (Number.isNaN(event.at) ? Infinity : event.at)
-  return events.toSorted((a, b) => order(a) - order(b))
+  return events
+    .filter((event) => run === undefined || runOf(event) === run)
+    .toSorted((a, b) => order(a) - order(b))
+}
+
+/** The widget's badge tone for each state; `working` is its "In progress". */
+const TONES = {
+  open: 'open',
+  working: 'claimed',
+  asking: 'asking',
+  answered: 'answered',
+  stopped: 'stopped',
+  resolved: 'resolved',
+} as const
+
+/** A state as the widget's badge, smaller. */
+const StateChip = ({ state }: { state: ReviewState }) => (
+  <Chip tone={TONES[state]} small>
+    {state}
+  </Chip>
+)
+
+/** A run's id: a click shows only that run in the timeline, another click all of them. */
+function RunTag({
+  run,
+  selected,
+  onSelect,
+}: {
+  run: string
+  selected: string | undefined
+  onSelect: (run: string | undefined) => void
+}) {
+  return (
+    <button
+      type="button"
+      className="cb-debug-tag cb-debug-run"
+      aria-pressed={selected === run}
+      title={selected === run ? 'Show every run' : `Show run ${run} only`}
+      onClick={() => onSelect(selected === run ? undefined : run)}
+    >
+      {run}
+    </button>
+  )
 }
 
 function Time({ at }: { at: number }) {
@@ -164,10 +298,20 @@ function Time({ at }: { at: number }) {
   )
 }
 
-function MessageEvent({ message }: { message: ReviewMessage }) {
+function MessageEvent({
+  message,
+  run,
+  onRun,
+}: {
+  message: ReviewMessage
+  run: string | undefined
+  onRun: (run: string | undefined) => void
+}) {
   return (
     <div>
       <strong>{message.author}</strong>
+      <span className="cb-debug-tag">{message.id}</span>
+      {message.run && <RunTag run={message.run} selected={run} onSelect={onRun} />}
       {message.question && <span className="cb-debug-tag">question</span>}
       {message.multiple && <span className="cb-debug-tag">multiple</span>}
       <p>{message.body}</p>
@@ -195,6 +339,10 @@ interface ToolCall {
   result?: string
   error?: boolean
 }
+
+/** A comment's step files, every run's, as the server has them on disk. */
+const stepsUrl = (id: string) =>
+  new URL(`api/debug/steps/${id}`, new URL('.', import.meta.url)).href
 
 /** The call as the server read it in Claude Code's transcripts; null when it could not. */
 async function fetchToolCall(id: string): Promise<ToolCall | null> {
@@ -255,11 +403,20 @@ function ToolId({ id }: { id: string }) {
   )
 }
 
-function StepEvent({ step }: { step: ReviewProgress }) {
+function StepEvent({
+  step,
+  run,
+  onRun,
+}: {
+  step: ReviewProgress
+  run: string | undefined
+  onRun: (run: string | undefined) => void
+}) {
   return (
     <div>
       <strong>{step.kind}</strong>
       {step.state && <span className="cb-debug-tag">{step.state}</span>}
+      {step.run && <RunTag run={step.run} selected={run} onSelect={onRun} />}
       {step.id && <ToolId id={step.id} />}
       {step.label && <p>{step.label}</p>}
       {step.error && <p>error: {step.error}</p>}
@@ -267,58 +424,94 @@ function StepEvent({ step }: { step: ReviewProgress }) {
   )
 }
 
-function Timeline({ comment }: { comment: ReviewComment }) {
+function Timeline({
+  comment,
+  run,
+  onRun,
+}: {
+  comment: ReviewComment
+  run: string | undefined
+  onRun: (run: string | undefined) => void
+}) {
+  const runs = runsOf(comment)
   return (
-    <ol className="cb-debug-timeline" aria-label="Conversation">
-      {timelineOf(comment).map((event, index) => (
-        <li
-          // The timeline is rebuilt from the comment on every change: its order is its identity.
-          // oxlint-disable-next-line react/no-array-index-key
-          key={index}
-          className={`cb-debug-event cb-debug-event--${event.kind}${
-            event.kind === 'step' && event.step.state === 'failed'
-              ? ' cb-debug-event--failed'
-              : ''
-          }`}
-        >
-          <Time at={event.at} />
-          {event.kind === 'status' ? (
-            <div>
-              <strong>{event.label}</strong>
-              {event.detail && <p>{event.detail}</p>}
-            </div>
-          ) : event.kind === 'message' ? (
-            <MessageEvent message={event.message} />
-          ) : (
-            <StepEvent step={event.step} />
-          )}
-        </li>
-      ))}
-    </ol>
+    <>
+      {runs.length > 0 && (
+        <div className="cb-debug-runs" role="group" aria-label="Runs">
+          Runs:
+          {runs.map((id) => (
+            <RunTag key={id} run={id} selected={run} onSelect={onRun} />
+          ))}
+        </div>
+      )}
+      <ol className="cb-debug-timeline" aria-label="Conversation">
+        {withSeparators(timelineOf(comment, run), agentsOf(comment)).map(
+          (event, index) =>
+            event.kind === 'separator' ? (
+              // oxlint-disable-next-line react/no-array-index-key -- rebuilt on every change, like the rows
+              <SeparatorRow key={index} separator={event} />
+            ) : (
+              <li
+                // The timeline is rebuilt from the comment on every change: its order is its identity.
+                // oxlint-disable-next-line react/no-array-index-key
+                key={index}
+                className={`cb-debug-event cb-debug-event--${event.kind}${
+                  event.kind === 'step' && event.step.state === 'failed'
+                    ? ' cb-debug-event--failed'
+                    : ''
+                }`}
+              >
+                <Time at={event.at} />
+                {event.kind === 'status' ? (
+                  <div>
+                    {event.state ? (
+                      <StateChip state={event.state} />
+                    ) : (
+                      <strong>{event.label}</strong>
+                    )}
+                    {event.run && (
+                      <RunTag run={event.run} selected={run} onSelect={onRun} />
+                    )}
+                    {event.detail && <p>{event.detail}</p>}
+                  </div>
+                ) : event.kind === 'message' ? (
+                  <MessageEvent message={event.message} run={run} onRun={onRun} />
+                ) : (
+                  <StepEvent step={event.step} run={run} onRun={onRun} />
+                )}
+              </li>
+            ),
+        )}
+      </ol>
+    </>
   )
 }
 
 function Fields({ comment }: { comment: ReviewComment }) {
-  // The chip's status, and whether the reader stopped the run.
-  const state = paused(comment) ? 'paused' : statusOf(comment)
-  const rows: [string, string | undefined][] = [
+  const { anchor } = comment
+  const rows: [string, ReactNode][] = [
     ['id', comment.id],
-    ['state', state],
-    ['status', comment.status],
+    ['state', <StateChip key="state" state={comment.state} />],
     ['route', comment.route],
     ['url', comment.url],
-    ['section', comment.section],
-    ['quote', comment.quote && `${comment.quote} (#${comment.occurrence})`],
-    ['element', comment.element?.selector],
-    ['claimedAt', comment.claimedAt],
-    ['askedAt', comment.askedAt],
-    ['cancelledAt', comment.cancelledAt],
-    ['resolvedAt', comment.resolvedAt],
+    ['section', anchor.section],
+    ['quote', anchor.quote && `${anchor.quote} (#${anchor.occurrence})`],
+    ['element', anchor.element?.selector],
+    ['createdAt', comment.createdAt],
+    [
+      'runs',
+      runsOf(comment)
+        .map((id) => {
+          const agent = agentsOf(comment).get(id)
+          return agent ? `${id} (${agentName(agent)})` : id
+        })
+        .join(', '),
+    ],
   ]
   return (
     <dl className="cb-debug-fields">
       {rows
-        .filter((row): row is [string, string] => !!row[1])
+        .filter(([, value]) => !!value)
         .map(([name, value]) => (
           <Fragment key={name}>
             <dt>{name}</dt>
@@ -344,6 +537,8 @@ export function DebugPanel({
   const raw = useRaw()
   // Picked while the widget showed `current`: a thread opened since takes over.
   const [selected, setSelected] = useState<{ id: string; current?: string }>()
+  // The run the timeline shows alone, for the comment it was picked on.
+  const [run, setRun] = useState<{ comment: string; run: string }>()
   const others = useCommentHistory(open)
 
   useEffect(() => {
@@ -400,7 +595,7 @@ export function DebugPanel({
               key={entry.id}
               type="button"
               aria-pressed={entry.id === comment?.id}
-              title={entry.body}
+              title={entry.messages[0]?.body}
               onClick={() =>
                 setSelected({ id: entry.id, ...(current ? { current } : {}) })
               }
@@ -414,7 +609,21 @@ export function DebugPanel({
         {comment ? (
           <>
             <Fields comment={comment} />
-            <Timeline comment={comment} />
+            <a
+              className="cb-debug-file"
+              href={stepsUrl(comment.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open the step files ({comment.id}.history.jsonl)
+            </a>
+            <Timeline
+              comment={comment}
+              run={run?.comment === comment.id ? run.run : undefined}
+              onRun={(picked) =>
+                setRun(picked ? { comment: comment.id, run: picked } : undefined)
+              }
+            />
             <details
               className="cb-debug-raw"
               open={raw}

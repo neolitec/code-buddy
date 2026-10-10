@@ -70,11 +70,11 @@ serves the committed app alone, without Code Buddy.
 
 The dev build (`npm run build:dev`) adds a **debug panel** to the widget: the
 wrench in the panel's header, or Alt+Shift+D, shows every comment as the widget
-holds it, its fields, its conversation in order (messages, the latest time of
-each status, and every tool call of every run with its id) and its raw JSON,
-live. With that build, a run's steps are not dropped when it ends: they go to
+holds it, its fields, its conversation in order (messages, every move of the
+comment, and every tool call of every run with its id; a run's id shows that
+run alone) and its raw JSON, live. With that build, a run's steps are not dropped when it ends: they go to
 `<id>.history.jsonl`, next to the run's progress file, until the comment is
-deleted, and the server serves them with `history=1`. `comments.json` never
+deleted, and the server serves them with `history=1`; a link in the panel opens them as they are on disk. `comments.json` never
 holds them. A click on a tool call's id unfolds what the agent sent and got
 back: the server reads it in Claude Code's transcripts of the last 7 days
 (`~/.claude/projects/`), with a dev widget only. `npm run build` leaves the panel out: the released `widget.js`
@@ -97,6 +97,8 @@ What to do after a change, in a running session, is in the README's
 | `types/index.d.ts`                    | The values the hooks keep for the session (`$.state`)               |
 | `skills/code-buddy/SKILL.md`          | The skill Claude reads: modes, agent prompts                        |
 | `skills/code-buddy/scripts/`          | Node.js scripts (ES modules, JSDoc types), run by the skill         |
+| `skills/code-buddy/scripts/lib/format.mjs` | The comments file's format: its version, states, moves and types; the reference for every part that reads it |
+| `docs/comments-file.md` | The comments file and the step files: where they live, their schemas, the states diagram |
 | `skills/code-buddy/widget/src/`       | The browser widget (React, TypeScript)                              |
 | `skills/code-buddy/widget/dist/`      | The built widget: `npm run build`; never committed on `main`        |
 | `playground/`                         | A fake app to try Code Buddy on, launched by `/playground`          |

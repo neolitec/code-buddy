@@ -30,17 +30,26 @@ function layout() {
   })
 }
 
+/** Resolved once, then followed up: open again, about something else. */
+const reopened = [
+  { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+  { at: '2026-01-01T10:00:01.000Z', state: 'working', by: 'agent', run: 'r1' },
+  { at: '2026-01-01T10:00:02.000Z', state: 'resolved', by: 'agent', run: 'r1' },
+  { at: '2026-01-01T10:00:03.000Z', state: 'open', by: 'reader' },
+] as const
+
 const marks = () => Array.from(document.querySelectorAll('.cb-mark'))
 /** The rainbow behind each line of a text: in a layer of the page, out of `body`. */
 const lines = () =>
   Array.from(document.querySelectorAll<HTMLElement>('.code-buddy-layer > *'))
 
-test('an element is in progress until its thread is resolved', async () => {
+test('an element is in progress until its thread is first resolved', async () => {
   layout()
   document.body.replaceChildren()
   fakeServer([
     comment({ id: 'c1', element: TITLE }),
-    comment({ id: 'c2', element: TITLE, status: 'resolved' }),
+    comment({ id: 'c2', element: TITLE, state: 'resolved' }),
+    comment({ id: 'c3', element: TITLE, events: [...reopened] }),
   ])
   renderWidget()
 
@@ -74,13 +83,14 @@ test('an element keeps its in-progress look once its thread is opened', async ()
   expect(marks().map((mark) => mark.className)).toEqual(['cb-mark'])
 })
 
-test('a text is in progress until its thread is resolved', async () => {
+test('a text is in progress until its thread is first resolved', async () => {
   const highlights = stubHighlights()
   layout()
   document.body.replaceChildren()
   fakeServer([
     comment({ id: 'c1', quote: 'Playground' }),
-    comment({ id: 'c2', quote: 'Play', status: 'resolved' }),
+    comment({ id: 'c2', quote: 'Play', state: 'resolved' }),
+    comment({ id: 'c3', quote: 'Play', events: [...reopened] }),
   ])
   renderWidget()
 

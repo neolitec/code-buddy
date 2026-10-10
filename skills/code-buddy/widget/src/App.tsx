@@ -28,11 +28,12 @@ import {
   type ReviewComment,
   type ReviewMessage,
   type ReviewProgress,
+  answered,
   isActive,
   isAsking,
+  latestText,
   paused,
   statusOf,
-  threadOf,
 } from './domain'
 import { DebugPanel, DebugToggle } from './debug'
 import { readSession, writeSession } from './session'
@@ -82,6 +83,7 @@ const STATUS_CHIPS: Record<ReturnType<typeof statusOf>, string> = {
   open: 'Open',
   claimed: 'In progress',
   asking: 'Needs you',
+  answered: 'Answered',
   resolved: 'Resolved',
 }
 
@@ -299,11 +301,6 @@ function scopeLabel(comment: { route: string; url?: string }): string {
     : `Whole page · ${pagePath(comment.url) || comment.route}`
 }
 
-function latestText(comment: ReviewComment): string {
-  const last = comment.messages?.at(-1)
-  return last?.author === 'reader' ? last.body : comment.body
-}
-
 export default function App({ root }: { root: Element }) {
   const route = useRoute()
   const [saved] = useState(() => readSession<UiState>(UI_KEY))
@@ -350,9 +347,9 @@ export default function App({ root }: { root: Element }) {
   const page = useComments(route)
   const comments = page.comments
   const all = useAllComments(open && view === 'all')
-  // A claimed comment still open: some agent is on it right now.
+  // Some agent is on a comment right now.
   const working = [...comments, ...all.comments].some(
-    (comment) => isActive(comment) && !!comment.claimedAt,
+    (comment) => comment.state === 'working',
   )
   const watching = page.reachable
 
@@ -521,10 +518,11 @@ export default function App({ root }: { root: Element }) {
 
   const save = async () => {
     if (!draft?.body.trim()) return
-    const { app, ...anchor } = draft
+    const { app, body, ...anchor } = draft
     await run(async () => {
       const comment = await createComment({
-        ...anchor,
+        anchor,
+        body,
         route: app ? APP_ROUTE : route,
         url: window.location.href,
       })
@@ -539,7 +537,7 @@ export default function App({ root }: { root: Element }) {
   const jump = (comment: ReviewComment) => {
     setActiveId(comment.id)
     setThreadId(comment.id)
-    scrollToComment(root, comment)
+    scrollToComment(root, comment.anchor)
   }
 
   /** A bubble on the page: its thread, in the panel, opened if it was closed. */
@@ -562,11 +560,13 @@ export default function App({ root }: { root: Element }) {
   const openedId = drafting ? undefined : thread?.id
   // The thread the message box replies to: only once Claude is done or asks.
   const replying =
-    !drafting && thread && (thread.status === 'resolved' || isAsking(thread))
+    !drafting &&
+    thread &&
+    (thread.state === 'resolved' || isAsking(thread) || answered(thread))
       ? thread
       : undefined
   const reply = replying && followUp?.id === replying.id ? followUp.body : ''
-  const asked = replying && isAsking(replying) ? replying.messages?.at(-1) : undefined
+  const asked = replying && isAsking(replying) ? replying.messages.at(-1) : undefined
   const offered = !!asked?.options?.length
   const ticked = (comment: ReviewComment) =>
     picked?.id === comment.id ? picked.labels : []
@@ -715,16 +715,19 @@ export default function App({ root }: { root: Element }) {
     )
   }
 
-  const anchorDetails = (comment: ReviewComment) => (
-    <>
-      {comment.section && <span className="cb-section">{comment.section}</span>}
-      {comment.quote && <blockquote className="cb-quote">{comment.quote}</blockquote>}
-      {elementChip(comment, pagePath(comment.url) || comment.route, comment.id)}
-      {!comment.quote && !comment.element && (
-        <span className="cb-section">{scopeLabel(comment)}</span>
-      )}
-    </>
-  )
+  const anchorDetails = (comment: ReviewComment) => {
+    const { anchor } = comment
+    return (
+      <>
+        {anchor.section && <span className="cb-section">{anchor.section}</span>}
+        {anchor.quote && <blockquote className="cb-quote">{anchor.quote}</blockquote>}
+        {elementChip(anchor, pagePath(comment.url) || comment.route, comment.id)}
+        {!anchor.quote && !anchor.element && (
+          <span className="cb-section">{scopeLabel(comment)}</span>
+        )}
+      </>
+    )
+  }
 
   const deleteButton = (comment: ReviewComment) =>
     !isActive(comment) && (
@@ -749,12 +752,10 @@ export default function App({ root }: { root: Element }) {
         {deleteButton(comment)}
       </div>
       <div className="cb-chat">
-        {threadOf(comment).map((message, index, messages) =>
+        {comment.messages.map((message, index, messages) =>
           message.author === 'claude' ? (
             // Its steps were only there to wait on it: an answer shows alone.
-            // A thread only grows at its end: the index is a stable key.
-            // oxlint-disable-next-line react/no-array-index-key
-            <div key={index} className="cb-msg cb-msg--claude">
+            <div key={message.id} className="cb-msg cb-msg--claude">
               {message.question ? (
                 <Question
                   message={message}
@@ -771,8 +772,7 @@ export default function App({ root }: { root: Element }) {
               <MessageTime at={message.at} />
             </div>
           ) : (
-            // oxlint-disable-next-line react/no-array-index-key
-            <div key={index} className="cb-msg cb-msg--reader">
+            <div key={message.id} className="cb-msg cb-msg--reader">
               <div className="cb-bubble cb-bubble--reader">{message.body}</div>
               <MessageTime at={message.at} />
             </div>
@@ -780,7 +780,7 @@ export default function App({ root }: { root: Element }) {
         )}
       </div>
       {isActive(comment) &&
-        (comment.claimedAt ? (
+        (comment.state === 'working' ? (
           <div data-testid="cb-working">
             <CurrentStep step={comment.progress?.at(-1)} />
           </div>
@@ -857,7 +857,7 @@ export default function App({ root }: { root: Element }) {
             Cancel
           </Button>
         ) : (
-          comment.status === 'open' && (
+          (isAsking(comment) || answered(comment) || paused(comment)) && (
             <Button
               small
               variant="tertiary"
@@ -878,12 +878,12 @@ export default function App({ root }: { root: Element }) {
     const status = statusOf(comment)
     const href =
       pagePath(comment.url) || (comment.route === APP_ROUTE ? '' : comment.route)
-    const messages = threadOf(comment).length
+    const messages = comment.messages.length
     return (
       <article
         key={comment.id}
         data-testid="cb-summary"
-        className={`cb-item cb-summary ${comment.status === 'resolved' ? 'cb-item--faded' : ''} ${comment.id === activeId ? 'cb-item--active' : ''}`}
+        className={`cb-item cb-summary ${comment.state === 'resolved' ? 'cb-item--faded' : ''} ${comment.id === activeId ? 'cb-item--active' : ''}`}
         onClick={() => (showPage ? setThreadId(comment.id) : jump(comment))}
       >
         <div className="cb-summary-head">
@@ -901,8 +901,8 @@ export default function App({ root }: { root: Element }) {
               <Icon name="external" />
             </a>
           ) : (
-            <span className="cb-label" title={comment.section}>
-              {comment.section}
+            <span className="cb-label" title={comment.anchor.section}>
+              {comment.anchor.section}
             </span>
           )}
           <time dateTime={comment.createdAt}>
@@ -913,14 +913,18 @@ export default function App({ root }: { root: Element }) {
           </time>
           {deleteButton(comment)}
         </div>
-        <p>{comment.body}</p>
+        <p>{comment.messages[0]?.body}</p>
         {messages > 2 && <span className="cb-author">{messages} messages</span>}
       </article>
     )
   }
 
   const filtered = all.comments
-    .filter((comment) => statusFilter === 'all' || comment.status === statusFilter)
+    .filter(
+      (comment) =>
+        statusFilter === 'all' ||
+        (comment.state === 'resolved') === (statusFilter === 'resolved'),
+    )
     .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   const allCommentsView = (

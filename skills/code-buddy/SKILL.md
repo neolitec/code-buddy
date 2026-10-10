@@ -62,7 +62,9 @@ given) resumes it and nothing is lost.
    this session, and agents would work without file locks or progress: run
    `claude --version`, tell the user Code Buddy needs Claude Code 2.1.287 or
    later (`claude update`, then a new session) or, if it is already that
-   recent, that mods may be turned off for this session; then stop.
+   recent, that mods may be turned off for this session; then stop. On
+   `COMMENTS_REFUSED`, give the user its message and stop: the comments file
+   is in a format this version does not read.
 2. Tell the user to open or reload `devUrl` from `.code-buddy.json`.
 3. React to each line:
 
@@ -71,7 +73,7 @@ given) resumes it and nothing is lost.
 | `OPEN` / `NEW <id> …` | Start a subagent, unless one already runs for `<id>`. |
 | `FOLLOWUP <id> …` | The reader answered a resolved or stopped comment, or Claude's question. If subagent `cb-<first 8 chars of id>` exists in this session (running or finished), SendMessage it the follow-up message below; otherwise start a new subagent. |
 | `EDIT <id> …` | SendMessage the new text to that comment's subagent; start one if none runs. |
-| `ASKED <id>` | The subagent put a question in the thread; the reader's answer comes back as `FOLLOWUP`. Nothing to do. |
+| `ASKED` / `ANSWERED <id>` | The subagent put a question, or its answer to a follow-up, in the thread; the reader resolves it or replies, as `FOLLOWUP`. Nothing to do. |
 | `RESOLVED` / `CANCELLED` / `DELETED <id>` | TaskStop that comment's subagent if it still runs; drop it from the queue. |
 
 Start subagents with the Agent tool: `run_in_background: true`, `name:
@@ -95,10 +97,11 @@ answer to the same subagent.
 >    cancelled, resolved or is waiting on the reader, stop and reply
 >    `CANCELLED`.
 > 2. Read the entry in `<commentsFile>` if the line is not enough: `route`,
->    `url`, `section`, and a text `quote` or a pointed `element` (selector from
->    `body`, tag, text, HTML excerpt). `route` `*` means the whole app.
->    `messages` holds the thread after the question: your earlier answers
->    (`claude`) were applied; act on the reader's last message. A
+>    `url`, and `anchor`: `section`, a text `quote` or a pointed `element`
+>    (selector from `body`, tag, text, HTML excerpt). `route` `*` means the
+>    whole app. `messages` holds the whole thread, the reader's comment first:
+>    your earlier answers (`claude`) were applied; act on the reader's last
+>    message. `state` says where it stands. A
 >    `cancellation` field lists files an earlier, stopped agent left changed:
 >    keep, finish or revert them to match the current text. When the element
 >    is unclear, screenshot it with Playwright on `<devUrl>`.
@@ -114,7 +117,8 @@ answer to the same subagent.
 >    progress: re-run once, then ignore them.
 > 5. Resolve it with one or two sentences the reader will see:
 >    `node SKILL/scripts/resolve.mjs <id> --project PROJECT "<answer>"` (pipe
->    the answer on stdin when it is long).
+>    the answer on stdin when it is long). On a thread resolved before, it
+>    prints `answered`: your answer waits on the reader, who resolves it.
 > 6. Reply with one line saying what changed. If the comment is unclear or
 >    needs a product decision, do not guess: ask it in the thread with
 >    `node SKILL/scripts/ask.mjs <id> --project PROJECT "<question>"` (stdin

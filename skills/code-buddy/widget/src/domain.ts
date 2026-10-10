@@ -1,7 +1,9 @@
 /** Route of a comment about the whole app; it is listed on every page. */
 export const APP_ROUTE = '*'
 
-export type ReviewCommentStatus = 'open' | 'resolved'
+/** Where a comment stands, as lib/format.mjs defines it. */
+export type ReviewState =
+  'open' | 'working' | 'asking' | 'answered' | 'stopped' | 'resolved'
 
 export interface ReviewElement {
   /** Selector from `body`, unique when it was recorded. */
@@ -34,6 +36,10 @@ export interface ReviewProgress {
   id?: string
   state?: 'running' | 'done' | 'failed'
   error?: string
+  /** The run it belongs to: `r1`, `r2`… */
+  run?: string
+  /** The Claude Code agent that called the tool. */
+  agent?: string
 }
 
 export interface ReviewOption {
@@ -42,7 +48,11 @@ export interface ReviewOption {
 }
 
 export interface ReviewMessage {
+  /** `m1`, `m2`… within the comment. */
+  id: string
   author: 'reader' | 'claude'
+  /** Claude only: the run that wrote it. */
+  run?: string
   body: string
   at: string
   /** Claude only: a question for the reader rather than an answer. */
@@ -60,27 +70,33 @@ export interface ReviewCancellation {
   /** Files the cancelled agent had already written, relative to the repo. */
   changed: string[]
   steps: number
+  run?: string
 }
 
-export interface ReviewComment extends ReviewAnchor {
+/** One move of a comment, never overwritten. */
+export interface ReviewEvent {
+  at: string
+  /** The state it moved to. */
+  state: ReviewState
+  by: 'reader' | 'agent' | 'server'
+  /** The run it belongs to: a claim (`working`) starts one. */
+  run?: string
+  /** `working` only: the Claude Code agent that claimed it. */
+  agent?: string
+}
+
+export interface ReviewComment {
   id: string
   route: string
   /** Full URL when the comment was written, query string and hash included. */
   url?: string
-  body: string
-  status: ReviewCommentStatus
+  anchor: ReviewAnchor
+  /** Always the last event's. */
+  state: ReviewState
   createdAt: string
-  /** Latest answer from the agent; also the last `claude` message. */
-  resolution?: string
-  /** Exchange after the first question (`body`), oldest first. */
-  messages?: ReviewMessage[]
-  resolvedAt?: string
-  /** Set by the agent when it starts working on the comment. */
-  claimedAt?: string
-  /** Set while Claude waits on the reader's answer to its question. */
-  askedAt?: string
-  /** Set while an open comment's run is cancelled, until the reader re-sends it. */
-  cancelledAt?: string
+  /** The whole thread, oldest first: the reader's comment, then the exchange. */
+  messages: ReviewMessage[]
+  events: ReviewEvent[]
   /** Last cancelled run; kept after a re-send so the next agent sees it. */
   cancellation?: ReviewCancellation
   /** Latest tool calls of the agent working on it; never stored in the file. */
@@ -89,14 +105,14 @@ export interface ReviewComment extends ReviewAnchor {
   history?: ReviewProgress[]
 }
 
-export type NewReviewComment = Pick<
-  ReviewComment,
-  'route' | 'url' | 'body' | 'section' | 'quote' | 'occurrence' | 'element'
->
+export type NewReviewComment = Pick<ReviewComment, 'route' | 'url' | 'anchor'> & {
+  body: string
+}
 
-export type ReviewCommentPatch = Partial<
-  Pick<ReviewComment, 'body' | 'status' | 'resolution'>
-> & {
+/** What the reader asks of a comment; the server turns it into a move. */
+export interface ReviewCommentPatch {
+  /** Resolves it, the reader being satisfied. */
+  status?: 'resolved'
   /** true stops the current run; false re-sends the comment to a new agent. */
   cancelled?: boolean
   /** Reopens a resolved comment, or answers Claude's question, with the reader's next message. */
@@ -107,49 +123,43 @@ export type ReviewCommentPatch = Partial<
   text?: string
 }
 
-/** The thread as a list, including the question and a legacy `resolution`. */
-export function threadOf(comment: ReviewComment): ReviewMessage[] {
-  const question: ReviewMessage = {
-    author: 'reader',
-    body: comment.body,
-    at: comment.createdAt,
-  }
-  if (comment.messages?.length) return [question, ...comment.messages]
-  return comment.resolution
-    ? [
-        question,
-        {
-          author: 'claude',
-          body: comment.resolution,
-          at: comment.resolvedAt ?? comment.createdAt,
-        },
-      ]
-    : [question]
-}
+type Lifecycle = Pick<ReviewComment, 'state'>
 
-type Lifecycle = Pick<ReviewComment, 'status' | 'cancelledAt' | 'askedAt'>
+/**
+ * Resolved once already: Claude's later answers wait on the reader, and the
+ * page no longer marks what the comment is about.
+ */
+export const wasResolved = (comment: Pick<ReviewComment, 'events'>) =>
+  comment.events.some((event) => event.state === 'resolved')
 
-/** True for an open comment an agent should be working on. */
+/** Waiting for an agent, or worked on by one. */
 export function isActive(comment: Lifecycle) {
-  return comment.status === 'open' && !comment.cancelledAt && !comment.askedAt
+  return comment.state === 'open' || comment.state === 'working'
 }
 
 /** True while Claude waits on the reader: the next move is theirs. */
 export function isAsking(comment: Lifecycle) {
-  return comment.status === 'open' && !comment.cancelledAt && !!comment.askedAt
+  return comment.state === 'asking'
 }
 
-/** An open comment whose run the reader cancelled, until they send it again. */
-export const paused = (comment: Lifecycle) =>
-  comment.status === 'open' && !!comment.cancelledAt
+/** A comment whose run the reader stopped, until they send it again. */
+export const paused = (comment: Lifecycle) => comment.state === 'stopped'
+
+/** Claude answered a follow-up: the reader follows up again or resolves it. */
+export const answered = (comment: Lifecycle) => comment.state === 'answered'
 
 /** Where a comment stands, as its chip in the panel shows it. */
 export function statusOf(
-  comment: Lifecycle & Pick<ReviewComment, 'claimedAt'>,
-): 'open' | 'claimed' | 'asking' | 'resolved' {
-  if (comment.status === 'resolved') return 'resolved'
-  if (isAsking(comment)) return 'asking'
-  return isActive(comment) && comment.claimedAt ? 'claimed' : 'open'
+  comment: Lifecycle,
+): 'open' | 'claimed' | 'asking' | 'answered' | 'resolved' {
+  if (comment.state === 'resolved') return 'resolved'
+  if (comment.state === 'asking' || comment.state === 'answered') return comment.state
+  return comment.state === 'working' ? 'claimed' : 'open'
+}
+
+/** The reader's latest words: their comment, or what they wrote since. */
+export function latestText(comment: Pick<ReviewComment, 'messages'>): string {
+  return comment.messages.findLast((message) => message.author === 'reader')?.body ?? ''
 }
 
 export function normaliseQuote(text: string): string {

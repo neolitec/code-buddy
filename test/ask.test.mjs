@@ -20,6 +20,7 @@ async function setUp(t) {
   const comment = await comments.create({
     route: '/',
     url: 'http://localhost/',
+    anchor: { section: '', quote: '', occurrence: 0 },
     body: 'Rework the cards',
   })
   /** @param {string[]} args */
@@ -47,10 +48,12 @@ test('asks a question with options, the reader picking several', async (t) => {
   assert.equal(asked.code, 0, asked.stderr)
   const [saved] = await comments.readAll()
   assert.ok(store.isAsking(saved))
-  assert.deepEqual(saved.messages.at(-1), {
+  assert.deepEqual(saved.messages[saved.messages.length - 1], {
+    id: 'm2',
+    run: 'r1',
     author: 'claude',
     body: 'Which layouts?',
-    at: saved.askedAt,
+    at: saved.events[saved.events.length - 1].at,
     question: true,
     options: [
       { label: 'Grid', description: 'Cards in a grid: three per row' },
@@ -86,7 +89,8 @@ test('says how to ask a question that starts with a dash', async (t) => {
   assert.match(refused.stderr, /'--'/)
   const asked = await ask('--option', 'Grid', '--option', 'List', '--', '-1px or 0?')
   assert.equal(asked.code, 0, asked.stderr)
-  assert.equal((await comments.readAll())[0].messages.at(-1).body, '-1px or 0?')
+  const [saved] = await comments.readAll()
+  assert.equal(saved.messages[saved.messages.length - 1].body, '-1px or 0?')
 })
 
 test('finds the project given as --project=<dir>', async (t) => {
