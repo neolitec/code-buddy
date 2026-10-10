@@ -38,6 +38,8 @@ export interface ReviewProgress {
   error?: string
   /** The run it belongs to: `r1`, `r2`… */
   run?: string
+  /** The Claude Code agent that called the tool. */
+  agent?: string
 }
 
 export interface ReviewOption {
@@ -79,6 +81,8 @@ export interface ReviewEvent {
   by: 'reader' | 'agent' | 'server'
   /** The run it belongs to: a claim (`working`) starts one. */
   run?: string
+  /** `working` only: the Claude Code agent that claimed it. */
+  agent?: string
 }
 
 export interface ReviewComment {

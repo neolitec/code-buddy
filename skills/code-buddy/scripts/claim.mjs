@@ -14,7 +14,9 @@ if (!id || !project) {
 }
 
 try {
-  const { comment, run } = await createStore(project).claim(id)
+  // Set by the hooks: the agent that runs this claim.
+  const agent = process.env.CODE_BUDDY_AGENT || undefined
+  const { comment, run } = await createStore(project).claim(id, { agent })
   // The hooks bind the agent to this project, and tag its steps with the run:
   // they cannot see the shell's directory a relative --project was resolved from.
   console.log(`claimed ${id} (${comment.route}) project=${project.root} run=${run}`)

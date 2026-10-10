@@ -78,6 +78,8 @@ export const TRANSITIONS = {
  * @property {State} state The state it moved to.
  * @property {Actor} by
  * @property {string} [run] The run it belongs to: started by `working`.
+ * @property {string} [agent] `working` only: the Claude Code agent that
+ *   claimed it (`main` for a session's main loop), when the hooks ran.
  */
 
 /**
@@ -115,6 +117,7 @@ export const TRANSITIONS = {
  * @property {'running' | 'done' | 'failed'} [state] Tools only.
  * @property {string} [error] Why it failed.
  * @property {string} [run] The run it belongs to.
+ * @property {string} [agent] The Claude Code agent that called the tool.
  */
 
 /**

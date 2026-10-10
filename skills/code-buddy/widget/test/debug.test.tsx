@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
-import { timelineOf, toggleDebug } from '../src/debug'
+import { agentsOf, timelineOf, toggleDebug, withSeparators } from '../src/debug'
 import { comment, fakeServer, openPanel, openThread } from './server'
 import { renderWidget } from './widget'
 
@@ -307,4 +307,56 @@ test("a tool call's id unfolds what the agent sent and got back", async () => {
 
   fireEvent.click(id)
   expect(panel.queryByText('exit 1')).toBeNull()
+})
+
+test('a line marks each run, a bolder one where the agent changes', async () => {
+  const runs = comment({
+    state: 'working',
+    events: [
+      { at: '2026-01-01T10:00:00.000Z', state: 'open', by: 'reader' },
+      {
+        at: '2026-01-01T10:00:01.000Z',
+        state: 'working',
+        by: 'agent',
+        run: 'r1',
+        agent: 'a1aaaaaaaa',
+      },
+      { at: '2026-01-01T10:00:02.000Z', state: 'asking', by: 'agent', run: 'r1' },
+      { at: '2026-01-01T10:00:03.000Z', state: 'open', by: 'reader' },
+      {
+        at: '2026-01-01T10:00:04.000Z',
+        state: 'working',
+        by: 'agent',
+        run: 'r2',
+        agent: 'a1aaaaaaaa',
+      },
+      { at: '2026-01-01T10:00:05.000Z', state: 'asking', by: 'agent', run: 'r2' },
+      { at: '2026-01-01T10:00:06.000Z', state: 'open', by: 'reader' },
+      { at: '2026-01-01T10:00:07.000Z', state: 'working', by: 'agent', run: 'r3' },
+    ],
+    // A run whose claim named no agent: its steps do.
+    history: [
+      {
+        at: Date.parse('2026-01-01T10:00:08.000Z'),
+        kind: 'read',
+        label: 'a',
+        run: 'r3',
+        agent: 'b2bbbbbbbb',
+      },
+    ],
+  })
+  expect(
+    withSeparators(timelineOf(runs), agentsOf(runs)).flatMap((row) =>
+      row.kind === 'separator' ? [`${row.run} ${row.agent} ${row.newAgent}`] : [],
+    ),
+  ).toEqual(['r1 a1aaaaaaaa true', 'r2 a1aaaaaaaa false', 'r3 b2bbbbbbbb true'])
+
+  fakeServer([runs])
+  openThread('c1')
+  renderWidget()
+  toggleDebug(true)
+  const panel = within(await screen.findByTestId('cb-debug'))
+  expect(panel.getByText('Agent a1aaaaaa · run r1')).toBeTruthy()
+  expect(panel.getByText('Run r2')).toBeTruthy()
+  expect(panel.getByText('Agent b2bbbbbb · run r3')).toBeTruthy()
 })

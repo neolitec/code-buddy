@@ -82,6 +82,8 @@ const relative = (root: string, file: string) =>
     : file.startsWith(`${root}/`)
       ? file.slice(root.length + 1)
       : undefined
+/** An agent id as a shell word: Claude Code's ids are letters and digits. */
+const shellWord = (value: string) => value.replace(/[^\w-]/g, '')
 const unquote = (value: string) => value.replace(/^["']|["']$/g, '')
 const basename = (file: string) => file.slice(file.lastIndexOf('/') + 1)
 /** `file` as seen from `root`, `../` included. */
@@ -285,7 +287,7 @@ async function record(
     $,
     project,
     comment,
-    run ? steps.map((step) => ({ ...step, run })) : steps,
+    steps.map((step) => ({ ...step, ...(run && { run }), agent })),
   )
   for (const step of steps) {
     const state = typeof step.state === 'string' ? ` ${step.state}` : ''
@@ -522,7 +524,7 @@ async function finish(
   last: Step,
 ) {
   const run = (await bindingOf($, agent))?.run
-  await closeLastStep($, project, comment, run ? { ...last, run } : last)
+  await closeLastStep($, project, comment, { ...last, ...(run && { run }), agent })
   await setBinding($, agent, undefined)
   const released = await releaseAll($, project, comment)
   await debug(
@@ -675,7 +677,15 @@ export const register: Register = (on) => {
       await record($, agent, project, binding.comment, [{ ...step, state: 'running' }])
     }
 
-    const ran = await next(e)
+    // claim.mjs records which agent opened the run: the hooks alone know it.
+    const ran = await next(
+      e.tool === 'Bash' && CLAIM.test(args.command ?? '')
+        ? {
+            ...e,
+            command: `export CODE_BUDDY_AGENT=${shellWord(agent)}; ${args.command}`,
+          }
+        : e,
+    )
     if (ran.deny !== undefined) return ran
 
     const command = e.tool === 'Bash' ? (args.command ?? '') : ''

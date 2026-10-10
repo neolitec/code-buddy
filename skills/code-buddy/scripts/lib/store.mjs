@@ -57,15 +57,21 @@ export const stateOf = (comment) => STATE_WORDS[comment.state] ?? String(comment
  * change goes through it.
  * @param {CommentV2} comment
  * @param {State} to
- * @param {{ by: Actor, run?: string, message?: Omit<MessageV2, 'id' | 'at'> }} how
+ * @param {{ by: Actor, run?: string, agent?: string, message?: Omit<MessageV2, 'id' | 'at'> }} how
  * @returns {string} When it moved.
  */
-function move(comment, to, { by, run, message }) {
+function move(comment, to, { by, run, agent, message }) {
   if (!canMove(comment.state, to)) {
     throw new StoreRefusal(`comment ${comment.id} is ${stateOf(comment)}`)
   }
   const at = new Date().toISOString()
-  comment.events.push({ at, state: to, by, ...(run ? { run } : {}) })
+  comment.events.push({
+    at,
+    state: to,
+    by,
+    ...(run ? { run } : {}),
+    ...(agent ? { agent } : {}),
+  })
   comment.state = to
   if (message) comment.messages.push({ id: nextMessageId(comment), ...message, at })
   return at
@@ -285,12 +291,14 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
     readAll,
 
     /**
-     * An agent starts working on the comment: a new run. Claimed again
-     * while working, it stays in the run it is in.
+     * An agent starts working on the comment: a new run, which records the
+     * agent's id when the hooks gave it. Claimed again while working, it
+     * stays in the run it is in.
      * @param {string} id
+     * @param {{ agent?: string }} [options]
      * @returns {Promise<{ comment: CommentV2, run: string }>}
      */
-    claim(id) {
+    claim(id, { agent } = {}) {
       return changeOne(id, (comment) => {
         const working = currentRun(comment)
         if (working) return { comment, run: working }
@@ -298,7 +306,7 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
           throw new StoreRefusal(`comment ${id} is ${stateOf(comment)}`)
         }
         const run = nextRunId(comment)
-        move(comment, 'working', { by: 'agent', run })
+        move(comment, 'working', { by: 'agent', run, agent })
         return { comment, run }
       })
     },

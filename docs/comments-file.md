@@ -99,7 +99,7 @@ untouched: the server stops with `COMMENTS_REFUSED old comments format: delete
 ### An event
 
 ```jsonc
-{ "at": "2026-10-10T15:44:57.469Z", "state": "working", "by": "agent", "run": "r1" }
+{ "at": "2026-10-10T15:44:57.469Z", "state": "working", "by": "agent", "run": "r1", "agent": "a3fbb6e8bc0e856d1" }
 ```
 
 | Field | Type | Notes |
@@ -108,6 +108,7 @@ untouched: the server stops with `COMMENTS_REFUSED old comments format: delete
 | `state` | State | The state the comment moved to. |
 | `by` | `reader`, `agent` (`server` is reserved) | Who moved it. |
 | `run` | `r1`, `r2`…, optional | The run it belongs to. Each `working` event starts one. |
+| `agent` | string, optional, `working` only | The Claude Code agent that claimed it (`main` for a session's main loop), which the hooks pass to `claim.mjs`. |
 
 ### A cancellation
 
@@ -194,6 +195,7 @@ one line each.
 | `state` | `running`, `done` or `failed`, tools only | |
 | `error` | string, optional | Why it failed: the first line of the tool's error, or the hooks' reason (a lock held by another comment's agent, a write from Bash). |
 | `run` | `r1`, `r2`… | The run it belongs to: the hooks write it from `claim.mjs`'s output, and the store adds it to untagged steps when it archives them. |
+| `agent` | string | The Claude Code agent that called the tool (`main` for a session's main loop). Runs of one comment may have different agents. |
 
 `<id>.jsonl` exists only while a run is in progress. When the run ends
 (`ask.mjs`, `resolve.mjs`, a stop, the reader resolving), the store moves its

@@ -73,7 +73,9 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
   // claim.mjs prints the project it found, from the shell's directory, and
   // a new run each time.
   const claims = new Map<string, number>()
+  const commands: string[] = []
   on('tool.call', (_$, e) => {
+    if (e.tool === 'Bash') commands.push(e.command)
     const claimed =
       e.tool === 'Bash' ? /claim\.mjs (\S+)/.exec(e.command)?.[1] : undefined
     if (claimed === 'gone') return { result: 'ok', text: 'comment gone is resolved\n' }
@@ -93,6 +95,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     [...files.keys(), ...removed].find((path) => path.endsWith(`/progress/${id}.jsonl`))
   return {
     file: (path: string) => files.get(path),
+    commands,
     write: (path: string, text: string) => files.set(path, text),
     env,
     clock,
@@ -243,6 +246,17 @@ test('a comment Claude works on stays active; one asking the reader does not', a
   w.setComments([{ id: 'c1', state: 'asking' }])
   const ran = await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(ran.deny ?? ran.text).toMatch(/reply "CANCELLED"/)
+})
+
+test('claim.mjs learns which agent claims, and each step names it', async ($, on) => {
+  const w = world(on, [{ id: 'c1', state: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.commands[0]).toBe(`export CODE_BUDDY_AGENT=a1; ${claim('c1')}`)
+  expect(w.progress('c1').map((step) => step.agent)).toEqual(['a1', 'a1', 'a1'])
+  // Only the claim: other commands run as the agent wrote them.
+  await $.tool.call(bash('a1', 'npm test'))
+  expect(w.commands.at(-1)).toBe('npm test')
 })
 
 test("a second claim tags the agent's steps with the new run", async ($, on) => {

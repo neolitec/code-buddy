@@ -36,6 +36,12 @@ const DEBUG_CSS = `
 .cb-debug-raw summary { cursor: pointer; color: var(--cb-muted); }
 .cb-debug-raw pre { margin: 6px 0 0; padding: 8px; background: var(--cb-surface-2); border-radius: 6px; overflow: auto; font-size: 11px; }
 .cb-debug-empty { color: var(--cb-muted); }
+.cb-debug-sep { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; color: var(--cb-muted); font: 600 11px/1.2 ui-monospace, monospace; letter-spacing: .04em; text-transform: uppercase; }
+.cb-debug-sep::before, .cb-debug-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--cb-border); }
+.cb-debug-sep small { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.cb-debug-sep--agent { margin-top: 16px; color: var(--cb-accent-strong); font-size: 12px; }
+.cb-debug-sep--agent::before, .cb-debug-sep--agent::after { border-top: 2px solid var(--cb-accent); }
+.cb-debug-sep--agent span { padding: 2px 10px; border: 2px solid var(--cb-accent); border-radius: 999px; background: var(--cb-accent-weak); }
 .cb-debug-file { align-self: flex-start; color: var(--cb-accent-strong); }
 .cb-debug-runs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; color: var(--cb-muted); }
 .cb-debug-run { border: 0; cursor: pointer; font-size: inherit; }
@@ -121,6 +127,66 @@ function stepsOf(comment: ReviewComment): ReviewProgress[] {
 export const runsOf = (comment: ReviewComment) => [
   ...new Set(comment.events.flatMap((event) => (event.run ? [event.run] : []))),
 ]
+
+/** Who ran each run: the agent its `working` event names, else its steps'. */
+export function agentsOf(comment: ReviewComment): Map<string, string> {
+  const agents = new Map<string, string>()
+  for (const event of comment.events) {
+    if (event.run && event.agent) agents.set(event.run, event.agent)
+  }
+  for (const step of stepsOf(comment)) {
+    if (step.run && step.agent && !agents.has(step.run)) agents.set(step.run, step.agent)
+  }
+  return agents
+}
+
+/** A line across the timeline where a run starts; a bolder one when its agent is another. */
+type Separator = { kind: 'separator'; run: string; agent?: string; newAgent: boolean }
+
+/** The timeline with a separator before each run, marking where the agent changes. */
+export function withSeparators(
+  events: TimelineEvent[],
+  agents: Map<string, string>,
+): (TimelineEvent | Separator)[] {
+  const rows: (TimelineEvent | Separator)[] = []
+  let lastRun: string | undefined
+  let lastAgent: string | undefined
+  for (const event of events) {
+    const run = runOf(event)
+    if (run && run !== lastRun) {
+      const agent = agents.get(run)
+      rows.push({
+        kind: 'separator',
+        run,
+        ...(agent ? { agent } : {}),
+        newAgent: !!agent && agent !== lastAgent,
+      })
+      lastRun = run
+      if (agent) lastAgent = agent
+    }
+    rows.push(event)
+  }
+  return rows
+}
+
+/** An agent's id, short enough to read; `main` is the session's main loop. */
+const agentName = (agent: string) =>
+  agent === 'main' ? 'main session' : agent.slice(0, 8)
+
+function SeparatorRow({ separator }: { separator: Separator }) {
+  const { run, agent, newAgent } = separator
+  return (
+    <li
+      className={`cb-debug-sep${newAgent ? ' cb-debug-sep--agent' : ''}`}
+      title={agent ? `Agent ${agent}` : undefined}
+    >
+      <span>
+        {newAgent && agent ? `Agent ${agentName(agent)} · run ${run}` : `Run ${run}`}
+        {!newAgent && agent && <small> · same agent</small>}
+      </span>
+    </li>
+  )
+}
 
 const runOf = (event: TimelineEvent) =>
   event.kind === 'status'
@@ -347,31 +413,39 @@ function Timeline({
         </div>
       )}
       <ol className="cb-debug-timeline" aria-label="Conversation">
-        {timelineOf(comment, run).map((event, index) => (
-          <li
-            // The timeline is rebuilt from the comment on every change: its order is its identity.
-            // oxlint-disable-next-line react/no-array-index-key
-            key={index}
-            className={`cb-debug-event cb-debug-event--${event.kind}${
-              event.kind === 'step' && event.step.state === 'failed'
-                ? ' cb-debug-event--failed'
-                : ''
-            }`}
-          >
-            <Time at={event.at} />
-            {event.kind === 'status' ? (
-              <div>
-                <strong>{event.label}</strong>
-                {event.run && <RunTag run={event.run} selected={run} onSelect={onRun} />}
-                {event.detail && <p>{event.detail}</p>}
-              </div>
-            ) : event.kind === 'message' ? (
-              <MessageEvent message={event.message} run={run} onRun={onRun} />
+        {withSeparators(timelineOf(comment, run), agentsOf(comment)).map(
+          (event, index) =>
+            event.kind === 'separator' ? (
+              // oxlint-disable-next-line react/no-array-index-key -- rebuilt on every change, like the rows
+              <SeparatorRow key={index} separator={event} />
             ) : (
-              <StepEvent step={event.step} run={run} onRun={onRun} />
-            )}
-          </li>
-        ))}
+              <li
+                // The timeline is rebuilt from the comment on every change: its order is its identity.
+                // oxlint-disable-next-line react/no-array-index-key
+                key={index}
+                className={`cb-debug-event cb-debug-event--${event.kind}${
+                  event.kind === 'step' && event.step.state === 'failed'
+                    ? ' cb-debug-event--failed'
+                    : ''
+                }`}
+              >
+                <Time at={event.at} />
+                {event.kind === 'status' ? (
+                  <div>
+                    <strong>{event.label}</strong>
+                    {event.run && (
+                      <RunTag run={event.run} selected={run} onSelect={onRun} />
+                    )}
+                    {event.detail && <p>{event.detail}</p>}
+                  </div>
+                ) : event.kind === 'message' ? (
+                  <MessageEvent message={event.message} run={run} onRun={onRun} />
+                ) : (
+                  <StepEvent step={event.step} run={run} onRun={onRun} />
+                )}
+              </li>
+            ),
+        )}
       </ol>
     </>
   )
@@ -388,7 +462,15 @@ function Fields({ comment }: { comment: ReviewComment }) {
     ['quote', anchor.quote && `${anchor.quote} (#${anchor.occurrence})`],
     ['element', anchor.element?.selector],
     ['createdAt', comment.createdAt],
-    ['runs', runsOf(comment).join(', ')],
+    [
+      'runs',
+      runsOf(comment)
+        .map((id) => {
+          const agent = agentsOf(comment).get(id)
+          return agent ? `${id} (${agentName(agent)})` : id
+        })
+        .join(', '),
+    ],
   ]
   return (
     <dl className="cb-debug-fields">
