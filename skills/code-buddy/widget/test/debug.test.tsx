@@ -211,3 +211,18 @@ test('the live run updates a step of the history', () => {
     ),
   ).toEqual(['t8 done', 't9 done'])
 })
+
+test("a tool call's id copies the command that finds it in the transcripts", async () => {
+  const writeText = vi.fn(async () => undefined)
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+  fakeServer([conversation])
+  openThread('c1')
+  renderWidget()
+  toggleDebug(true)
+
+  const panel = within(await screen.findByTestId('cb-debug'))
+  const id = panel.getByRole('button', { name: 't1' })
+  expect(id.title).toContain('~/.claude/projects/')
+  fireEvent.click(id)
+  expect(writeText).toHaveBeenCalledWith('grep -rl t1 ~/.claude/projects/')
+})
