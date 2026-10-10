@@ -74,7 +74,7 @@ holds it, its fields, its conversation in order (messages, every move of the
 comment, and every tool call of every run with its id; a run's id shows that
 run alone) and its raw JSON, live. With that build, a run's steps are not dropped when it ends: they go to
 `<id>.history.jsonl`, next to the run's progress file, until the comment is
-deleted, and the server serves them with `history=1`. `comments.json` never
+deleted, and the server serves them with `history=1`; a link in the panel opens them as they are on disk. `comments.json` never
 holds them. A click on a tool call's id unfolds what the agent sent and got
 back: the server reads it in Claude Code's transcripts of the last 7 days
 (`~/.claude/projects/`), with a dev widget only. `npm run build` leaves the panel out: the released `widget.js`

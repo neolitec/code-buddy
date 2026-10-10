@@ -109,6 +109,22 @@ export async function readProgress(project, id, limit, { history = false } = {})
   return limit ? steps.slice(-limit) : steps
 }
 
+/** @param {string} file */
+const readOrEmpty = (file) => readFile(file, 'utf8').catch(() => '')
+
+/**
+ * The comment's step files as they are on disk, one JSON line per step: the
+ * runs that ended, then the one in progress. Empty when it has none.
+ * @param {{ progressDir: string }} project
+ * @param {string} id
+ */
+export async function stepFiles(project, id) {
+  return (
+    (await readOrEmpty(historyPath(project, id))) +
+    (await readOrEmpty(progressPath(project, id)))
+  )
+}
+
 const progressPath = (project, id) => path.join(project.progressDir, `${id}.jsonl`)
 // Every step of the runs that ended, for the widget's debug panel; kept with a
 // dev build of the widget only (createStore's `history`).

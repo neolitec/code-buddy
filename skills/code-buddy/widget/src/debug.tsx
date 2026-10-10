@@ -36,6 +36,7 @@ const DEBUG_CSS = `
 .cb-debug-raw summary { cursor: pointer; color: var(--cb-muted); }
 .cb-debug-raw pre { margin: 6px 0 0; padding: 8px; background: var(--cb-surface-2); border-radius: 6px; overflow: auto; font-size: 11px; }
 .cb-debug-empty { color: var(--cb-muted); }
+.cb-debug-file { align-self: flex-start; color: var(--cb-accent-strong); }
 .cb-debug-runs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; color: var(--cb-muted); }
 .cb-debug-run { border: 0; cursor: pointer; font-size: inherit; }
 .cb-debug-run[aria-pressed="true"] { background: var(--cb-accent-weak); color: var(--cb-accent-strong); }
@@ -240,6 +241,10 @@ interface ToolCall {
   result?: string
   error?: boolean
 }
+
+/** A comment's step files, every run's, as the server has them on disk. */
+const stepsUrl = (id: string) =>
+  new URL(`api/debug/steps/${id}`, new URL('.', import.meta.url)).href
 
 /** The call as the server read it in Claude Code's transcripts; null when it could not. */
 async function fetchToolCall(id: string): Promise<ToolCall | null> {
@@ -486,6 +491,14 @@ export function DebugPanel({
         {comment ? (
           <>
             <Fields comment={comment} />
+            <a
+              className="cb-debug-file"
+              href={stepsUrl(comment.id)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open the step files ({comment.id}.history.jsonl)
+            </a>
             <Timeline
               comment={comment}
               run={run?.comment === comment.id ? run.run : undefined}

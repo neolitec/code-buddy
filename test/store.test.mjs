@@ -397,6 +397,23 @@ test('refuses a file in the old format, and leaves it untouched', async (t) => {
   assert.equal(await readFile(project.commentsFile, 'utf8'), old)
 })
 
+test('the step files read as on disk: the ended runs, then the current one', async (t) => {
+  const { project, comment } = await setUp(t)
+  const comments = store.createStore(project, { history: true })
+  assert.equal(await store.stepFiles(project, comment.id), '')
+  await claim(comments, comment.id)
+  await appendProgress(project, comment.id, { at: 1, kind: 'read', label: 'a.ts' })
+  await comments.answer(comment.id, 'Which colour?', { question: true })
+  await update(comments, comment.id, { followUp: 'Blue' })
+  await claim(comments, comment.id)
+  await appendProgress(project, comment.id, { at: 2, kind: 'edit', label: 'b.ts' })
+  assert.equal(
+    await store.stepFiles(project, comment.id),
+    '{"at":1,"kind":"read","label":"a.ts","run":"r1"}\n' +
+      '{"at":2,"kind":"edit","label":"b.ts"}\n',
+  )
+})
+
 test('only a dev build of the widget counts as one', async (t) => {
   const dir = await tempDir(t)
   const dev = path.join(dir, 'dev.js')

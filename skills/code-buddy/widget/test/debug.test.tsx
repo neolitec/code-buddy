@@ -147,6 +147,9 @@ test('Alt+Shift+D shows the selected comment as the widget holds it', async () =
   expect(panel.getByText('options: 32px (Like the hero) | 40px')).toBeTruthy()
   expect(panel.getByText('error: exit 1')).toBeTruthy()
   expect(panel.getByText(/"state": "asking"/)).toBeTruthy()
+  const file = panel.getByRole('link', { name: /c1\.history\.jsonl/ })
+  expect(file.getAttribute('href')).toMatch(/\/api\/debug\/steps\/c1$/)
+  expect(file.getAttribute('target')).toBe('_blank')
 
   // Claude's message leads to its run: the timeline shows that run alone.
   const runs = within(panel.getByRole('group', { name: 'Runs' }))

@@ -273,6 +273,11 @@ test('tells the manager when the reader resolves a comment themselves', async ()
   await nextLine(`RESOLVED ${created.id}`, printed)
 })
 
+test("a released widget's server serves no step files", async () => {
+  const response = await fetch(`${base}/api/debug/steps/c1`)
+  assert.equal(response.status, 404)
+})
+
 test('rejects malformed JSON with 400, and never echoes an exception', async () => {
   const response = await post('{not json')
   assert.equal(response.status, 400)

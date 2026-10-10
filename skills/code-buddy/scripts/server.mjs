@@ -24,6 +24,7 @@ import {
   createStore,
   isActive,
   normaliseQuote,
+  stepFiles,
 } from './lib/store.mjs'
 
 const found = findProject()
@@ -190,6 +191,22 @@ async function handle(req, res) {
     return call
       ? send(res, 200, call, cors)
       : send(res, 404, { error: 'not in the recent transcripts' }, cors)
+  }
+
+  // The dev widget's debug panel: a comment's step files as they are on disk,
+  // to read in a tab of their own.
+  const steps = /^\/api\/debug\/steps\/([^/]+)$/.exec(url.pathname)?.[1]
+  if (req.method === 'GET' && steps !== undefined) {
+    if (!isDevWidget(WIDGET) || !/^[\w-]+$/.test(steps)) {
+      return send(res, 404, { error: 'not found' }, cors)
+    }
+    res.writeHead(200, {
+      ...cors,
+      'content-type': 'text/plain; charset=utf-8',
+      'x-content-type-options': 'nosniff',
+      'cache-control': 'no-store',
+    })
+    return res.end(await stepFiles(project, steps))
   }
 
   if (url.pathname === '/api/comments') {
