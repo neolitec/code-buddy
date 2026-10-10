@@ -300,12 +300,20 @@ function ToolId({ id }: { id: string }) {
   )
 }
 
-function StepEvent({ step }: { step: ReviewProgress }) {
+function StepEvent({
+  step,
+  run,
+  onRun,
+}: {
+  step: ReviewProgress
+  run: string | undefined
+  onRun: (run: string | undefined) => void
+}) {
   return (
     <div>
       <strong>{step.kind}</strong>
       {step.state && <span className="cb-debug-tag">{step.state}</span>}
-      {step.run && <span className="cb-debug-tag">{step.run}</span>}
+      {step.run && <RunTag run={step.run} selected={run} onSelect={onRun} />}
       {step.id && <ToolId id={step.id} />}
       {step.label && <p>{step.label}</p>}
       {step.error && <p>error: {step.error}</p>}
@@ -355,7 +363,7 @@ function Timeline({
             ) : event.kind === 'message' ? (
               <MessageEvent message={event.message} run={run} onRun={onRun} />
             ) : (
-              <StepEvent step={event.step} />
+              <StepEvent step={event.step} run={run} onRun={onRun} />
             )}
           </li>
         ))}

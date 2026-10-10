@@ -344,12 +344,9 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
             }
             if (history) {
               // The runs that ended, then the one in progress.
-              const run = currentRun(c)
               const steps = [
                 ...(await readProgress(project, c.id, undefined, { history })),
-                ...(await readProgress(project, c.id)).map((step) =>
-                  run && !step.run ? { ...step, run } : step,
-                ),
+                ...(await readProgress(project, c.id)),
               ]
               if (steps.length) listed.history = steps
             }
@@ -388,8 +385,9 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
      * The reader's move, as the widget sends it: stop the run (`cancelled:
      * true`), send it again (`cancelled: false`, with new words in `text`),
      * answer or follow up (`followUp`, `choices`), or resolve it (`status`).
-     * Asking for the state the comment is already in changes nothing: a
-     * double click is not an error. Undefined when there is no such comment.
+     * A stop or a re-send the comment is past changes nothing: a double
+     * click, or a click on a button a poll late, is not an error. Undefined
+     * when there is no such comment.
      * @param {string} id
      * @param {{ cancelled?: boolean, followUp?: string, choices?: string[], text?: string, status?: 'resolved' }} patch
      * @returns {Promise<CommentV2 | undefined>}
@@ -400,11 +398,13 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
         const comment = comments.find((entry) => entry.id === id)
         if (!comment) return undefined
         const run = currentRun(comment)
-        if (cancelled === true && comment.state !== 'stopped') {
+        // Too late once Claude asked or answered: the stop does nothing, as
+        // the Cancel button the reader clicked was there a poll ago.
+        if (cancelled === true && isActive(comment)) {
           move(comment, 'stopped', { by: 'reader', run })
           comment.cancellation = await cancellationOf(id, run)
         }
-        if (cancelled === false && comment.state !== 'open') {
+        if (cancelled === false && comment.state === 'stopped') {
           move(comment, 'open', { by: 'reader' })
           const last = comment.messages.findLast((message) => message.author === 'reader')
           if (text && last) {

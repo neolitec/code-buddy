@@ -70,14 +70,19 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     env.set(e.name, e.value)
     return { value: undefined }
   })
-  // claim.mjs prints the project it found, from the shell's directory.
+  // claim.mjs prints the project it found, from the shell's directory, and
+  // a new run each time.
+  const claims = new Map<string, number>()
   on('tool.call', (_$, e) => {
     const claimed =
       e.tool === 'Bash' ? /claim\.mjs (\S+)/.exec(e.command)?.[1] : undefined
     if (claimed === 'gone') return { result: 'ok', text: 'comment gone is resolved\n' }
     const root = claimed === 'moved' ? '/nowhere' : ROOT
     return claimed
-      ? { result: 'ok', text: `claimed ${claimed} (/) project=${root} run=r1\n` }
+      ? {
+          result: 'ok',
+          text: `claimed ${claimed} (/) project=${root} run=r${claims.set(claimed, (claims.get(claimed) ?? 0) + 1).get(claimed)}\n`,
+        }
       : { result: 'ok' }
   })
   on('turn.complete', () => ({ text: '' }))
@@ -222,6 +227,30 @@ test('an agent whose comment the reader cancelled is told to stop', async ($, on
 
   const ran = await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(ran.deny ?? ran.text).toMatch(/reply "CANCELLED"/)
+})
+
+test('a comment Claude works on stays active; one asking the reader does not', async ($, on) => {
+  const w = world(on, [{ id: 'c1', state: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  // As claim.mjs writes it.
+  w.setComments([{ id: 'c1', state: 'working' }])
+  expect((await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))).deny).toBeUndefined()
+  expect(w.progress('c1').at(-1)).toEqual(
+    expect.objectContaining({ kind: 'edit', state: 'done' }),
+  )
+
+  w.setComments([{ id: 'c1', state: 'asking' }])
+  const ran = await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(ran.deny ?? ran.text).toMatch(/reply "CANCELLED"/)
+})
+
+test("a second claim tags the agent's steps with the new run", async ($, on) => {
+  const w = world(on, [{ id: 'c1', state: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.turn.complete({ turnId: 'turn', agentId: 'a1', reason: 'answer' })
+  await $.tool.call(bash('a1', claim('c1')))
+  await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
+  expect(w.progress('c1').map((step) => step.run)).toEqual(['r1', 'r2', 'r2', 'r2'])
 })
 
 test('tells the server, through the environment, that the hooks are loaded', async ($, on) => {

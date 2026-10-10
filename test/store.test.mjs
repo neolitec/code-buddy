@@ -223,10 +223,10 @@ test('with a dev widget, the debug history keeps every run, and goes with the co
 
   assert.equal((await comments.list('/'))[0].history, undefined)
   const [listed] = await comments.list('/', { history: true })
-  // Each step tagged with its run, the hooks having left them untagged.
+  // A run that ended tags the steps the hooks left untagged.
   assert.deepEqual(listed.history, [
     { at: 1, id: 't1', kind: 'read', label: 'a.ts', state: 'done', run: 'r1' },
-    { at: 3, id: 't2', kind: 'edit', label: 'b.ts', state: 'running', run: 'r2' },
+    { at: 3, id: 't2', kind: 'edit', label: 'b.ts', state: 'running' },
   ])
 
   await comments.remove(comment.id)
@@ -255,7 +255,6 @@ test('a move outside the graph is refused, and writes nothing', async (t) => {
   )
   await comments.answer(comment.id, 'Done.')
   const resolved = await readFile(project.commentsFile, 'utf8')
-  await assert.rejects(comments.update(comment.id, { cancelled: true }), /is resolved/)
   await assert.rejects(comments.claim(comment.id), /is resolved/)
   await assert.rejects(comments.answer(comment.id, 'Again'), store.StoreRefusal)
   assert.equal(await readFile(project.commentsFile, 'utf8'), resolved)
@@ -304,6 +303,54 @@ test('two questions give two asking events, each run its own', async (t) => {
       ['m4', 'claude', 'r2'],
     ],
   )
+})
+
+test('a stop or a re-send the comment is past changes nothing', async (t) => {
+  const { comments, comment } = await setUp(t)
+  await claim(comments, comment.id)
+  const asked = await comments.answer(comment.id, 'Which blue?', { question: true })
+  // Clicked a poll late: Claude had just asked.
+  await update(comments, comment.id, { cancelled: true })
+  const resent = await update(comments, comment.id, { cancelled: false, text: 'Red' })
+  assert.deepEqual(statesOf(resent), statesOf(asked))
+  assert.deepEqual(resent.messages, asked.messages)
+})
+
+test('the reader resolving a working comment ends its run', async (t) => {
+  const { project, comment } = await setUp(t)
+  const comments = store.createStore(project, { history: true })
+  await claim(comments, comment.id)
+  await appendProgress(project, comment.id, { at: 1, kind: 'read', label: 'a.ts' })
+  const resolved = await update(comments, comment.id, { status: 'resolved' })
+  assert.deepEqual(lastOf(resolved.events), {
+    at: lastOf(resolved.events).at,
+    state: 'resolved',
+    by: 'reader',
+    run: 'r1',
+  })
+  assert.equal(existsSync(path.join(project.progressDir, `${comment.id}.jsonl`)), false)
+  const [listed] = await comments.list('/', { history: true })
+  assert.deepEqual(listed.history, [{ at: 1, kind: 'read', label: 'a.ts', run: 'r1' }])
+})
+
+test('a follow-up reopens a resolved comment; a re-send keeps the thread', async (t) => {
+  const { comments, comment } = await setUp(t)
+  await claim(comments, comment.id)
+  await comments.answer(comment.id, 'Done.')
+  const reopened = await update(comments, comment.id, { followUp: 'Bluer' })
+  assert.equal(reopened.state, 'open')
+  assert.deepEqual(
+    reopened.messages.map((m) => [m.id, m.author, m.body]),
+    [
+      ['m1', 'reader', 'Make it blue'],
+      ['m2', 'claude', 'Done.'],
+      ['m3', 'reader', 'Bluer'],
+    ],
+  )
+  await update(comments, comment.id, { cancelled: true })
+  const resent = await update(comments, comment.id, { cancelled: false })
+  assert.deepEqual(resent.messages, reopened.messages)
+  assert.deepEqual(statesOf(resent).slice(-3), ['open', 'stopped', 'open'])
 })
 
 test('refuses a file in the old format, and leaves it untouched', async (t) => {

@@ -147,3 +147,22 @@ test("a move the comment can no longer make shows the server's words", async () 
   fireEvent.click(await screen.findByTestId('cb-cancel'))
   expect(await screen.findByText('comment c1 is resolved')).toBeTruthy()
 })
+
+test("sending again starts from the reader's latest words, not their first", async () => {
+  fakeServer([
+    comment({
+      state: 'stopped',
+      messages: [
+        { author: 'claude', body: 'Done.', at: '2026-01-01T10:01:00.000Z', run: 'r1' },
+        { author: 'reader', body: 'Bigger still', at: '2026-01-01T10:02:00.000Z' },
+      ],
+    }),
+  ])
+  openThread('c1')
+  renderWidget()
+
+  const box = await screen.findByRole('textbox', {
+    name: 'Edit the comment before sending it again',
+  })
+  expect(box).toHaveProperty('value', 'Bigger still')
+})

@@ -139,7 +139,9 @@ export const canMove = (from, to) => TRANSITIONS[from]?.includes(to) ?? false
  * @param {(string | undefined)[]} ids
  */
 function nextId(prefix, ids) {
-  const used = ids.map((id) => (id?.startsWith(prefix) ? Number(id.slice(1)) || 0 : 0))
+  const used = ids.map((id) =>
+    id?.startsWith(prefix) ? Number(id.slice(prefix.length)) || 0 : 0,
+  )
   return `${prefix}${Math.max(0, ...used) + 1}`
 }
 

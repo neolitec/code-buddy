@@ -11,8 +11,8 @@ export type Binding = {
 }
 
 /**
- * What the hooks read of the comments file (lib/format.mjs): which comments
- * an agent may work on.
+ * What the hooks read of the comments file: a narrowed view of lib/format.mjs's
+ * CommentsFile, the format's reference, for which comments an agent may work on.
  */
 export type CommentsFile = {
   version: number

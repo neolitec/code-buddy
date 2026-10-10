@@ -22,7 +22,6 @@ import {
   StoreRefusal,
   createStore,
   isActive,
-  isAsking,
   normaliseQuote,
 } from './lib/store.mjs'
 
@@ -239,8 +238,20 @@ async function handle(req, res) {
   return send(res, 404, { error: 'not found' }, cors)
 }
 
-/** By comment id: its latest reader message, as `<id> <body>`, when last seen active. */
+/**
+ * By comment id, when last seen active: when it last opened (its latest
+ * `open` event) and its latest reader message, as `<id> <body>`.
+ * @type {Map<string, { opened: number, text: string }>}
+ */
 const seen = new Map()
+
+/** The line for a comment that is no longer active, by where it went. */
+const goneLine = (id, state) =>
+  state === 'asking'
+    ? `ASKED ${id}`
+    : state === 'resolved'
+      ? `RESOLVED ${id}`
+      : `CANCELLED ${id}`
 
 /** The reader's latest message after their comment, when the thread ends on it. */
 function latestReply(comment) {
@@ -288,27 +299,25 @@ async function tick(first) {
     current.add(comment.id)
     const latest = comment.messages.findLast((message) => message.author === 'reader')
     const text = `${latest?.id} ${latest?.body}`
+    const opened = comment.events.findLastIndex((event) => event.state === 'open')
     const previous = seen.get(comment.id)
-    if (previous === undefined) {
+    // Stopped, asked or resolved, then opened again between two polls: the
+    // manager hears both, as if it had seen each.
+    if (previous && previous.opened !== opened) {
+      console.log(goneLine(comment.id, comment.events[opened - 1]?.state))
+    }
+    if (previous === undefined || previous.opened !== opened) {
       const kind = latestReply(comment) ? 'FOLLOWUP' : first ? 'OPEN' : 'NEW'
       console.log(`${kind} ${describe(comment)}`)
-    } else if (previous !== text) {
+    } else if (previous.text !== text) {
       console.log(`EDIT ${describe(comment)}`)
     }
-    seen.set(comment.id, text)
+    seen.set(comment.id, { opened, text })
   }
   for (const id of seen.keys()) {
     if (current.has(id)) continue
     const gone = comments.find((comment) => comment.id === id)
-    console.log(
-      !gone
-        ? `DELETED ${id}`
-        : isAsking(gone)
-          ? `ASKED ${id}`
-          : gone.state === 'resolved'
-            ? `RESOLVED ${id}`
-            : `CANCELLED ${id}`,
-    )
+    console.log(gone ? goneLine(id, gone.state) : `DELETED ${id}`)
     seen.delete(id)
   }
 }

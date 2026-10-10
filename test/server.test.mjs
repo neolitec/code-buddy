@@ -198,15 +198,33 @@ test('refuses a move the comment cannot make with 409, in words for the reader',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
+  // Nothing to follow up while it waits for Claude.
+  const refused = await patch({ followUp: 'And red' })
+  assert.equal(refused.status, 409)
+  assert.deepEqual(await json(refused), { error: `comment ${created.id} is open` })
+
   const printed = output.length
   assert.equal((await patch({ cancelled: true })).status, 200)
   await nextLine(`CANCELLED ${created.id}`, printed)
-  // A double click: the same move again changes nothing.
+  // A double click, or a stop a poll late: nothing changes, and no error.
   assert.equal((await patch({ cancelled: true })).status, 200)
   assert.equal((await patch({ status: 'resolved' })).status, 200)
-  const refused = await patch({ cancelled: true })
-  assert.equal(refused.status, 409)
-  assert.deepEqual(await json(refused), { error: `comment ${created.id} is resolved` })
+  const late = await patch({ cancelled: true })
+  assert.equal(late.status, 200)
+  assert.equal((await json(late)).state, 'resolved')
+})
+
+test('tells the manager when the reader resolves a comment themselves', async () => {
+  const creating = output.length
+  const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))
+  await nextLine(`NEW ${created.id} `, creating)
+  const printed = output.length
+  await fetch(`${base}/api/comments/${created.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ status: 'resolved' }),
+  })
+  await nextLine(`RESOLVED ${created.id}`, printed)
 })
 
 test('rejects malformed JSON with 400, and never echoes an exception', async () => {
