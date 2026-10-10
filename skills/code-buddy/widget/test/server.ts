@@ -31,6 +31,7 @@ export function comment({
   ...fields
 }: Fields = {}): ReviewComment {
   const createdAt = fields.createdAt ?? '2026-01-01T10:00:00.000Z'
+  const state = fields.state ?? 'open'
   return {
     id: 'c1',
     route: PAGE,
@@ -42,7 +43,19 @@ export function comment({
       { id: 'm1', author: 'reader', body, at: createdAt },
       ...messages.map((message, index) => ({ id: `m${index + 2}`, ...message })),
     ],
-    events: [{ at: createdAt, state: 'open', by: 'reader' }],
+    // The state is always the last event's.
+    events: [
+      { at: createdAt, state: 'open', by: 'reader' },
+      ...(state === 'open'
+        ? []
+        : [
+            {
+              at: createdAt,
+              state,
+              by: state === 'stopped' ? 'reader' : 'agent',
+            } as const,
+          ]),
+    ],
     ...fields,
   }
 }

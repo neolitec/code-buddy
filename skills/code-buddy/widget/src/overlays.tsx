@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { elementFromAnchor, rangesFromAnchors, startRect } from './anchors'
-import type { ReviewComment } from './domain'
+import { type ReviewComment, wasResolved } from './domain'
 import { RAINBOW_PERIOD } from './styles'
 import { Icon } from './ui'
 
@@ -79,7 +79,7 @@ interface Mark extends Box {
 
 function findElements(root: Element, comments: ReviewComment[]) {
   return comments.flatMap((comment) => {
-    if (comment.state === 'resolved') return []
+    if (wasResolved(comment)) return []
     const element = elementFromAnchor(root, comment.anchor)
     return element ? [{ comment, element }] : []
   })
@@ -90,8 +90,9 @@ function measureElements(found: ReturnType<typeof findElements>): Mark[] {
 }
 
 /**
- * Frames around the elements that open comments point at, until Claude
- * resolves their thread; a bubble on each opens the comment's thread.
+ * Frames around the elements that open comments point at, until their thread
+ * is first resolved: a follow-up, often about something else, does not bring
+ * them back. A bubble on each opens the comment's thread.
  */
 export function ElementMarks({
   root,
@@ -153,11 +154,10 @@ function lineBoxes(range: Range): Box[] {
   })
 }
 
-/** The ranges of the open comments on a text, read from the page's text once. */
+/** The ranges of the comments on a text never resolved, read from the page's text once. */
 function findQuotes(root: Element, comments: ReviewComment[]) {
   const quoted = comments.filter(
-    (comment) =>
-      comment.state !== 'resolved' && !comment.anchor.element && comment.anchor.quote,
+    (comment) => !wasResolved(comment) && !comment.anchor.element && comment.anchor.quote,
   )
   const ranges = rangesFromAnchors(
     root,
@@ -231,7 +231,7 @@ function measureQuotes(found: ReturnType<typeof findQuotes>): QuotePin[] {
 }
 
 /**
- * A rainbow behind each commented text, until Claude resolves its thread, and a
+ * A rainbow behind each commented text, until its thread is first resolved, and a
  * bubble above its start, which opens the comment's thread.
  */
 export function QuoteBubbles({

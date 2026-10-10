@@ -73,7 +73,7 @@ given) resumes it and nothing is lost.
 | `OPEN` / `NEW <id> …` | Start a subagent, unless one already runs for `<id>`. |
 | `FOLLOWUP <id> …` | The reader answered a resolved or stopped comment, or Claude's question. If subagent `cb-<first 8 chars of id>` exists in this session (running or finished), SendMessage it the follow-up message below; otherwise start a new subagent. |
 | `EDIT <id> …` | SendMessage the new text to that comment's subagent; start one if none runs. |
-| `ASKED <id>` | The subagent put a question in the thread; the reader's answer comes back as `FOLLOWUP`. Nothing to do. |
+| `ASKED` / `ANSWERED <id>` | The subagent put a question, or its answer to a follow-up, in the thread; the reader resolves it or replies, as `FOLLOWUP`. Nothing to do. |
 | `RESOLVED` / `CANCELLED` / `DELETED <id>` | TaskStop that comment's subagent if it still runs; drop it from the queue. |
 
 Start subagents with the Agent tool: `run_in_background: true`, `name:

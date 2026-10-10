@@ -353,6 +353,30 @@ test('a follow-up reopens a resolved comment; a re-send keeps the thread', async
   assert.deepEqual(statesOf(resent).slice(-3), ['open', 'stopped', 'open'])
 })
 
+test("once resolved, Claude's answers wait on the reader, who resolves", async (t) => {
+  const { comments, comment } = await setUp(t)
+  await claim(comments, comment.id)
+  await comments.answer(comment.id, 'Bigger.')
+  await update(comments, comment.id, { followUp: 'Bolder too' })
+  await claim(comments, comment.id)
+  const answered = await comments.answer(comment.id, 'Bolder.')
+  assert.equal(answered.state, 'answered')
+  assert.equal(store.isActive(answered), false)
+  // An agent claims it only once the reader follows up again.
+  await assert.rejects(comments.claim(comment.id), /answered, waiting on the reader/)
+  const resolved = await update(comments, comment.id, { status: 'resolved' })
+  assert.deepEqual(statesOf(resolved).slice(-3), ['working', 'answered', 'resolved'])
+  assert.equal(lastOf(resolved.events).by, 'reader')
+})
+
+test('a stop is dated once: its event and its cancellation agree', async (t) => {
+  const { comments, comment } = await setUp(t)
+  await claim(comments, comment.id)
+  const stopped = await update(comments, comment.id, { cancelled: true })
+  assert.ok(stopped.cancellation)
+  assert.equal(stopped.cancellation.at, lastOf(stopped.events).at)
+})
+
 test('refuses a file in the old format, and leaves it untouched', async (t) => {
   const project = projects.project(await tempProject(t))
   const comments = store.createStore(project)

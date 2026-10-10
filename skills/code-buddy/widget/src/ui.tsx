@@ -112,7 +112,7 @@ export function Chip({
   tone,
   children,
 }: {
-  tone: 'open' | 'claimed' | 'asking' | 'resolved'
+  tone: 'open' | 'claimed' | 'asking' | 'answered' | 'resolved'
   children: ReactNode
 }) {
   return <span className={`cb-chip cb-chip--${tone}`}>{children}</span>

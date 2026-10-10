@@ -166,3 +166,27 @@ test("sending again starts from the reader's latest words, not their first", asy
   })
   expect(box).toHaveProperty('value', 'Bigger still')
 })
+
+test("Claude's answer to a follow-up waits on the reader, who resolves it", async () => {
+  const server = fakeServer([
+    comment({
+      state: 'answered',
+      messages: [
+        { author: 'claude', body: 'Bigger.', at: '2026-01-01T10:01:00.000Z', run: 'r1' },
+        { author: 'reader', body: 'Bolder too', at: '2026-01-01T10:02:00.000Z' },
+        { author: 'claude', body: 'Bolder.', at: '2026-01-01T10:03:00.000Z', run: 'r2' },
+      ],
+    }),
+  ])
+  openThread('c1')
+  renderWidget()
+
+  expect(
+    await screen.findByPlaceholderText('Follow up, clarify, ask for a change…'),
+  ).toBeTruthy()
+  expect(screen.queryByTestId('cb-working')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
+  await waitFor(() =>
+    expect(server.patches).toEqual([{ id: 'c1', patch: { status: 'resolved' } }]),
+  )
+})

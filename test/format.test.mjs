@@ -10,6 +10,7 @@ import {
   nextMessageId,
   nextRunId,
   parseFile,
+  wasResolved,
 } from '../skills/code-buddy/scripts/lib/format.mjs'
 
 /** @type {[import('../skills/code-buddy/scripts/lib/format.mjs').State, import('../skills/code-buddy/scripts/lib/format.mjs').State][]} */
@@ -20,8 +21,11 @@ const ALLOWED = [
   ['working', 'asking'],
   ['working', 'resolved'],
   ['working', 'stopped'],
+  ['working', 'answered'],
   ['asking', 'open'],
   ['asking', 'resolved'],
+  ['answered', 'open'],
+  ['answered', 'resolved'],
   ['stopped', 'open'],
   ['stopped', 'resolved'],
   ['resolved', 'open'],
@@ -41,6 +45,7 @@ test('allows every move of the graph, and no other', () => {
   assert.equal(canMove('asking', 'working'), false)
   assert.equal(canMove('stopped', 'working'), false)
   assert.equal(canMove('resolved', 'working'), false)
+  assert.equal(canMove('answered', 'working'), false)
   assert.deepEqual(Object.keys(TRANSITIONS), [...STATES])
 })
 
@@ -87,5 +92,20 @@ test('refuses another version', () => {
   assert.throws(
     () => parseFile(JSON.stringify({ version: 3, comments: [] })),
     /unknown comments format \(version 3\)/,
+  )
+})
+
+test('knows a comment resolved once, even open again', () => {
+  const open = {
+    at: '',
+    state: /** @type {const} */ ('open'),
+    by: /** @type {const} */ ('reader'),
+  }
+  assert.equal(wasResolved({ events: [open] }), false)
+  assert.equal(
+    wasResolved({
+      events: [open, { at: '', state: 'resolved', by: 'reader' }, open],
+    }),
+    true,
   )
 })

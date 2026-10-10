@@ -503,7 +503,26 @@ async function setBinding($: $, agent: string, binding: Binding | undefined) {
   $.ui.status(count ? `code-buddy: ${count} agent(s) on comments` : undefined)
 }
 
-async function finish($: $, agent: string, project: Project, comment: string) {
+/**
+ * The script that ended the run, done: the store archived the run's steps
+ * while it still ran. Only into a history the store keeps (dev widget).
+ */
+async function closeLastStep($: $, project: Project, comment: string, step: Step) {
+  const history = `${project.progressDir}/${comment}.history.jsonl`
+  if (!(await $.fs.exists(history).catch(() => false))) return
+  const text = await $.fs.read(history).catch(() => '')
+  await $.fs.write(history, `${text}${JSON.stringify(step)}\n`)
+}
+
+async function finish(
+  $: $,
+  agent: string,
+  project: Project,
+  comment: string,
+  last: Step,
+) {
+  const run = (await bindingOf($, agent))?.run
+  await closeLastStep($, project, comment, run ? { ...last, run } : last)
   await setBinding($, agent, undefined)
   const released = await releaseAll($, project, comment)
   await debug(
@@ -521,16 +540,23 @@ async function finish($: $, agent: string, project: Project, comment: string) {
 /**
  * claim.mjs binds the agent to its comment; resolve.mjs and ask.mjs end its
  * run. A failed chained command may still have run one: its output and the
- * comment's state tell. Returns true when the run ended.
+ * comment's state tell. Returns true when the run ended. `last`: the step of
+ * this command, once it ran.
  */
-async function followScripts($: $, agent: string, command: string, output: string) {
+async function followScripts(
+  $: $,
+  agent: string,
+  command: string,
+  output: string,
+  last: (project: Project) => Step,
+) {
   const ended = command.match(RESOLVE)?.[1]
   const binding = await bindingOf($, agent)
   if (ended && binding?.comment === ended) {
     const project = await projectOf($, agent, binding)
     const active = project && (await activeCommentIds($, project))
     if (project && !active?.has(ended)) {
-      await finish($, agent, project, ended)
+      await finish($, agent, project, ended, last(project))
       return true
     }
   }
@@ -653,7 +679,13 @@ export const register: Register = (on) => {
     if (ran.deny !== undefined) return ran
 
     const command = e.tool === 'Bash' ? (args.command ?? '') : ''
-    if (await followScripts($, agent, command, ran.text ?? '')) return ran
+    const done = (where: Project): Step => ({
+      at: Date.now(),
+      id: e.tool_use_id,
+      ...describe(where, e.tool, args),
+      state: ran.isError ? 'failed' : 'done',
+    })
+    if (await followScripts($, agent, command, ran.text ?? '', done)) return ran
     // Read again: claim.mjs may have just bound the agent.
     const bound = await bindingOf($, agent)
     const boundProject = bound && (await projectOf($, agent, bound))
@@ -663,12 +695,7 @@ export const register: Register = (on) => {
       await unlock($, boundProject, bound.comment, '@build')
       await debug($, agent, bound.comment, 'build ended: released the build lock')
     }
-    const step: Step = {
-      at: Date.now(),
-      id: e.tool_use_id,
-      ...describe(boundProject, e.tool, args),
-      state: ran.isError ? 'failed' : 'done',
-    }
+    const step = done(boundProject)
     if (ran.isError) step.error = short((ran.text ?? '').trim().split('\n')[0] ?? '', 160)
     await record($, agent, boundProject, bound.comment, [step])
     return ran

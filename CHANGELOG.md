@@ -11,7 +11,7 @@ released to the `stable` branch.
 
 - **A new comments file format (version 2).** `.code-buddy/comments.json` is
   now `{ "version": 2, "comments": [...] }`: each comment has an explicit
-  `state` (`open`, `working`, `asking`, `stopped`, `resolved`) and an `events`
+  `state` (`open`, `working`, `asking`, `answered`, `stopped`, `resolved`) and an `events`
   log of every move, never overwritten; `messages` holds the whole thread, the
   reader's comment first, each message with an `id`, and each of Claude's with
   the `run` (`r1`, `r2`…) that wrote it, as the agent's steps are; the anchor
@@ -21,6 +21,13 @@ released to the `stable` branch.
   format (`COMMENTS_REFUSED`) and says so.
 - The debug panel's timeline shows every move of a comment (a thread that
   asked twice shows two `asking`), and a run's id shows that run alone.
+- **Only the reader closes a thread they followed up on.** Claude's first
+  answer resolves a comment; once resolved, its answers to later follow-ups
+  leave it `answered` (the server prints `ANSWERED`), and the reader follows
+  up again or resolves it.
+- **The page stops marking a comment once it is first resolved**: a
+  follow-up, often about something else, no longer brings back its outline
+  or its rainbow.
 
 - **The page shows where each comment stands.** Blue while the reader picks
   an element or text, and while the comment on it is written (the picked

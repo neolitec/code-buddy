@@ -96,7 +96,7 @@ export async function reply(script, { question }) {
       options: parsed?.options,
       multiple: parsed?.multiple,
     })
-    console.log(`${question ? 'asked' : 'resolved'} ${id} (${comment.route})`)
+    console.log(`${question ? 'asked' : comment.state} ${id} (${comment.route})`)
   } catch (error) {
     if (!(error instanceof StoreRefusal)) throw error
     console.error(`${error.message}; not ${question ? 'asking' : 'resolving'}`)

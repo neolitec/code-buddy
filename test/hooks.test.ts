@@ -93,6 +93,7 @@ function world(on: On, comments: Comment[], { gitRoot }: { gitRoot?: string } = 
     [...files.keys(), ...removed].find((path) => path.endsWith(`/progress/${id}.jsonl`))
   return {
     file: (path: string) => files.get(path),
+    write: (path: string, text: string) => files.set(path, text),
     env,
     clock,
     removed,
@@ -251,6 +252,21 @@ test("a second claim tags the agent's steps with the new run", async ($, on) => 
   await $.tool.call(bash('a1', claim('c1')))
   await $.tool.call(edit('a1', `${ROOT}/src/App.tsx`))
   expect(w.progress('c1').map((step) => step.run)).toEqual(['r1', 'r2', 'r2', 'r2'])
+})
+
+test('the script that ends a run is done in the history the store keeps', async ($, on) => {
+  const w = world(on, [{ id: 'c1', state: 'open' }])
+  await $.tool.call(bash('a1', claim('c1')))
+  // The store archived the run (a dev widget), resolve.mjs still running.
+  const history = (w.progressPath('c1') ?? '').replace(/\.jsonl$/, '.history.jsonl')
+  w.write(history, '{"kind":"start"}\n')
+  w.setComments([{ id: 'c1', state: 'resolved' }])
+  await $.tool.call(bash('a1', resolveCmd('c1')))
+
+  const last = JSON.parse((w.file(history) ?? '').trim().split('\n').at(-1) ?? '{}')
+  expect(last).toEqual(
+    expect.objectContaining({ kind: 'bash', state: 'done', run: 'r1' }),
+  )
 })
 
 test('tells the server, through the environment, that the hooks are loaded', async ($, on) => {

@@ -2,7 +2,8 @@
 // server.mjs --project <dir>
 // Serves the widget and its API to the project's dev app, and prints one line
 // per comment needing attention (the manager reads them through Monitor):
-// OPEN (backlog at start), NEW, FOLLOWUP, EDIT, ASKED, RESOLVED, CANCELLED, DELETED.
+// OPEN (backlog at start), NEW, FOLLOWUP, EDIT, ASKED, ANSWERED, RESOLVED, CANCELLED,
+// DELETED.
 // Only runs while /code-buddy is active: no server, no widget.
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -249,9 +250,11 @@ const seen = new Map()
 const goneLine = (id, state) =>
   state === 'asking'
     ? `ASKED ${id}`
-    : state === 'resolved'
-      ? `RESOLVED ${id}`
-      : `CANCELLED ${id}`
+    : state === 'answered'
+      ? `ANSWERED ${id}`
+      : state === 'resolved'
+        ? `RESOLVED ${id}`
+        : `CANCELLED ${id}`
 
 /** The reader's latest message after their comment, when the thread ends on it. */
 function latestReply(comment) {

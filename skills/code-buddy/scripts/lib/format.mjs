@@ -6,24 +6,27 @@ export const FORMAT_VERSION = 2
 
 /**
  * Where a comment stands. `open`: waiting for an agent; `working`: an agent
- * claimed it; `asking`: Claude waits on the reader's answer; `stopped`: the
- * reader stopped the run; `resolved`: done.
- * @typedef {'open' | 'working' | 'asking' | 'stopped' | 'resolved'} State
+ * claimed it; `asking`: Claude waits on the reader's answer; `answered`:
+ * Claude answered a follow-up, and the reader follows up again or resolves it;
+ * `stopped`: the reader stopped the run; `resolved`: done.
+ * @typedef {'open' | 'working' | 'asking' | 'answered' | 'stopped' | 'resolved'} State
  */
 
 /** @type {readonly State[]} */
-export const STATES = ['open', 'working', 'asking', 'stopped', 'resolved']
+export const STATES = ['open', 'working', 'asking', 'answered', 'stopped', 'resolved']
 
 /**
  * The moves a comment may make, from each state. An agent claims (`working`),
- * asks or resolves; the reader stops, answers, sends again, follows up or
- * resolves it themselves.
+ * asks, resolves, or once the comment was resolved, answers (`answered`): only
+ * the reader resolves it again. The reader stops, answers, sends again,
+ * follows up or resolves it themselves.
  * @type {Readonly<Record<State, readonly State[]>>}
  */
 export const TRANSITIONS = {
   open: ['working', 'stopped', 'resolved'],
-  working: ['asking', 'resolved', 'stopped'],
+  working: ['asking', 'answered', 'resolved', 'stopped'],
   asking: ['open', 'resolved'],
+  answered: ['open', 'resolved'],
   stopped: ['open', 'resolved'],
   resolved: ['open'],
 }
@@ -158,6 +161,14 @@ export const nextRunId = (comment) =>
     'r',
     comment.events.map((event) => event.run),
   )
+
+/**
+ * Resolved once already: Claude's later answers wait on the reader, and the
+ * page no longer marks the anchor.
+ * @param {Pick<CommentV2, 'events'>} comment
+ */
+export const wasResolved = (comment) =>
+  comment.events.some((event) => event.state === 'resolved')
 
 /** The run in progress: the one the last event belongs to, while working. */
 export const currentRun = (/** @type {Pick<CommentV2, 'state' | 'events'>} */ comment) =>

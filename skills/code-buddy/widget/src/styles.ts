@@ -82,7 +82,7 @@ code { font-family: var(--cb-mono); }
 .cb-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 11px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .cb-chip--open { background: var(--cb-accent-weak); color: var(--cb-accent); }
 .cb-chip--claimed { background: #dcebf8; color: var(--cb-accent-strong); }
-.cb-chip--asking { background: #fdf3e1; color: #7a4e0e; }
+.cb-chip--asking, .cb-chip--answered { background: #fdf3e1; color: #7a4e0e; }
 .cb-chip--resolved { background: var(--cb-green-bg); color: var(--cb-green); }
 
 .cb-textarea {

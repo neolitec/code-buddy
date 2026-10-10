@@ -214,6 +214,52 @@ test('refuses a move the comment cannot make with 409, in words for the reader',
   assert.equal((await json(late)).state, 'resolved')
 })
 
+test('tells the manager Claude answered a follow-up, which waits on the reader', async () => {
+  const creating = output.length
+  const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))
+  await nextLine(`NEW ${created.id} `, creating)
+  /** @param {string} script @param {string} text */
+  const reply = (script, text) =>
+    run(process.execPath, [
+      path.join(SCRIPTS, script),
+      created.id,
+      '--project',
+      root,
+      text,
+    ])
+  await run(process.execPath, [
+    path.join(SCRIPTS, 'claim.mjs'),
+    created.id,
+    '--project',
+    root,
+  ])
+  let printed = output.length
+  assert.equal(
+    (await reply('resolve.mjs', 'Done.')).stdout,
+    `resolved ${created.id} (/)\n`,
+  )
+  await nextLine(`RESOLVED ${created.id}`, printed)
+  printed = output.length
+  await fetch(`${base}/api/comments/${created.id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ followUp: 'More' }),
+  })
+  await nextLine(`FOLLOWUP ${created.id} `, printed)
+  await run(process.execPath, [
+    path.join(SCRIPTS, 'claim.mjs'),
+    created.id,
+    '--project',
+    root,
+  ])
+  printed = output.length
+  assert.equal(
+    (await reply('resolve.mjs', 'More.')).stdout,
+    `answered ${created.id} (/)\n`,
+  )
+  await nextLine(`ANSWERED ${created.id}`, printed)
+})
+
 test('tells the manager when the reader resolves a comment themselves', async () => {
   const creating = output.length
   const created = await json(await post(JSON.stringify({ route: '/', body: 'Hi' })))

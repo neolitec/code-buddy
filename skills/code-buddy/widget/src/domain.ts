@@ -2,7 +2,8 @@
 export const APP_ROUTE = '*'
 
 /** Where a comment stands, as lib/format.mjs defines it. */
-export type ReviewState = 'open' | 'working' | 'asking' | 'stopped' | 'resolved'
+export type ReviewState =
+  'open' | 'working' | 'asking' | 'answered' | 'stopped' | 'resolved'
 
 export interface ReviewElement {
   /** Selector from `body`, unique when it was recorded. */
@@ -120,6 +121,13 @@ export interface ReviewCommentPatch {
 
 type Lifecycle = Pick<ReviewComment, 'state'>
 
+/**
+ * Resolved once already: Claude's later answers wait on the reader, and the
+ * page no longer marks what the comment is about.
+ */
+export const wasResolved = (comment: Pick<ReviewComment, 'events'>) =>
+  comment.events.some((event) => event.state === 'resolved')
+
 /** Waiting for an agent, or worked on by one. */
 export function isActive(comment: Lifecycle) {
   return comment.state === 'open' || comment.state === 'working'
@@ -133,10 +141,15 @@ export function isAsking(comment: Lifecycle) {
 /** A comment whose run the reader stopped, until they send it again. */
 export const paused = (comment: Lifecycle) => comment.state === 'stopped'
 
+/** Claude answered a follow-up: the reader follows up again or resolves it. */
+export const answered = (comment: Lifecycle) => comment.state === 'answered'
+
 /** Where a comment stands, as its chip in the panel shows it. */
-export function statusOf(comment: Lifecycle): 'open' | 'claimed' | 'asking' | 'resolved' {
+export function statusOf(
+  comment: Lifecycle,
+): 'open' | 'claimed' | 'asking' | 'answered' | 'resolved' {
   if (comment.state === 'resolved') return 'resolved'
-  if (comment.state === 'asking') return 'asking'
+  if (comment.state === 'asking' || comment.state === 'answered') return comment.state
   return comment.state === 'working' ? 'claimed' : 'open'
 }
 

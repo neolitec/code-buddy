@@ -28,6 +28,7 @@ import {
   type ReviewComment,
   type ReviewMessage,
   type ReviewProgress,
+  answered,
   isActive,
   isAsking,
   latestText,
@@ -82,6 +83,7 @@ const STATUS_CHIPS: Record<ReturnType<typeof statusOf>, string> = {
   open: 'Open',
   claimed: 'In progress',
   asking: 'Needs you',
+  answered: 'Answered',
   resolved: 'Resolved',
 }
 
@@ -558,7 +560,9 @@ export default function App({ root }: { root: Element }) {
   const openedId = drafting ? undefined : thread?.id
   // The thread the message box replies to: only once Claude is done or asks.
   const replying =
-    !drafting && thread && (thread.state === 'resolved' || isAsking(thread))
+    !drafting &&
+    thread &&
+    (thread.state === 'resolved' || isAsking(thread) || answered(thread))
       ? thread
       : undefined
   const reply = replying && followUp?.id === replying.id ? followUp.body : ''
@@ -853,7 +857,7 @@ export default function App({ root }: { root: Element }) {
             Cancel
           </Button>
         ) : (
-          (isAsking(comment) || paused(comment)) && (
+          (isAsking(comment) || answered(comment) || paused(comment)) && (
             <Button
               small
               variant="tertiary"

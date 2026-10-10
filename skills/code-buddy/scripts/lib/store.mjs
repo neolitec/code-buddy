@@ -11,6 +11,7 @@ import {
   nextMessageId,
   nextRunId,
   parseFile,
+  wasResolved,
 } from './format.mjs'
 import { isDevWidget } from './project.mjs'
 
@@ -42,6 +43,7 @@ const STATE_WORDS = {
   open: 'open',
   working: 'being worked on',
   asking: "waiting on the reader's answer",
+  answered: 'answered, waiting on the reader',
   stopped: 'cancelled',
   resolved: 'resolved',
 }
@@ -56,6 +58,7 @@ export const stateOf = (comment) => STATE_WORDS[comment.state] ?? String(comment
  * @param {CommentV2} comment
  * @param {State} to
  * @param {{ by: Actor, run?: string, message?: Omit<MessageV2, 'id' | 'at'> }} how
+ * @returns {string} When it moved.
  */
 function move(comment, to, { by, run, message }) {
   if (!canMove(comment.state, to)) {
@@ -65,6 +68,7 @@ function move(comment, to, { by, run, message }) {
   comment.events.push({ at, state: to, by, ...(run ? { run } : {}) })
   comment.state = to
   if (message) comment.messages.push({ id: nextMessageId(comment), ...message, at })
+  return at
 }
 
 /**
@@ -238,14 +242,15 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
 
   /**
    * @param {string} id
+   * @param {string} at When the reader stopped it: the `stopped` event's time.
    * @param {string} [run]
    * @returns {Promise<import('./format.mjs').Cancellation>}
    */
-  async function cancellationOf(id, run) {
+  async function cancellationOf(id, at, run) {
     const steps = await readProgress(project, id)
     await endRun(id, run)
     return {
-      at: new Date().toISOString(),
+      at,
       changed: [
         ...new Set(
           steps
@@ -282,7 +287,9 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
     },
 
     /**
-     * Files Claude's answer under the comment, with the run that wrote it. A
+     * Files Claude's answer under the comment, with the run that wrote it.
+     * The first answer resolves it; once it was resolved, a later one leaves
+     * it `answered`, and only the reader resolves it again. A
      * question leaves the comment waiting on the reader: asked only in the
      * manager's chat, it used to leave a thread open with no answer and no
      * agent, showing "Waiting for Claude" to a reader who was the one being
@@ -306,18 +313,22 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
           move(comment, 'working', { by: 'agent', run: nextRunId(comment) })
         }
         const run = currentRun(comment)
-        move(comment, question ? 'asking' : 'resolved', {
-          by: 'agent',
-          run,
-          message: {
-            ...(run ? { run } : {}),
-            author: 'claude',
-            body,
-            ...(question ? { question: true } : {}),
-            ...(question && options?.length ? { options } : {}),
-            ...(question && options?.length && multiple ? { multiple: true } : {}),
+        move(
+          comment,
+          question ? 'asking' : wasResolved(comment) ? 'answered' : 'resolved',
+          {
+            by: 'agent',
+            run,
+            message: {
+              ...(run ? { run } : {}),
+              author: 'claude',
+              body,
+              ...(question ? { question: true } : {}),
+              ...(question && options?.length ? { options } : {}),
+              ...(question && options?.length && multiple ? { multiple: true } : {}),
+            },
           },
-        })
+        )
         await endRun(id, run)
         return comment
       })
@@ -401,8 +412,8 @@ export function createStore(project, { history: keepHistory = isDevWidget() } = 
         // Too late once Claude asked or answered: the stop does nothing, as
         // the Cancel button the reader clicked was there a poll ago.
         if (cancelled === true && isActive(comment)) {
-          move(comment, 'stopped', { by: 'reader', run })
-          comment.cancellation = await cancellationOf(id, run)
+          const at = move(comment, 'stopped', { by: 'reader', run })
+          comment.cancellation = await cancellationOf(id, at, run)
         }
         if (cancelled === false && comment.state === 'stopped') {
           move(comment, 'open', { by: 'reader' })
