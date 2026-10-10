@@ -117,7 +117,8 @@ answer to the same subagent.
 >    progress: re-run once, then ignore them.
 > 5. Resolve it with one or two sentences the reader will see:
 >    `node SKILL/scripts/resolve.mjs <id> --project PROJECT "<answer>"` (pipe
->    the answer on stdin when it is long).
+>    the answer on stdin when it is long). On a thread resolved before, it
+>    prints `answered`: your answer waits on the reader, who resolves it.
 > 6. Reply with one line saying what changed. If the comment is unclear or
 >    needs a product decision, do not guess: ask it in the thread with
 >    `node SKILL/scripts/ask.mjs <id> --project PROJECT "<question>"` (stdin
